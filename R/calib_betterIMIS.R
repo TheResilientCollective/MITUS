@@ -134,7 +134,7 @@ Imis2 <- function (B = 1000, B.re = 10000, number_k = 100, seed_val=1,SaveNam="x
         for (j in 1:(D+k-2)) { gaussian_new[j,(dim(X_all)[1]-B+1):dim(X_all)[1]] = dpropnew(X_k, center_all[j,],sigma_all[[j]],logg=F) }
        gaussian_all = gaussian_new
     }
-    if(stat_all[k,3]>(1-exp(-1))*B.re) {  break }
+    if(stat_all[k,2]>(1-exp(-1))*B.re) {  break }
   }
 
    return(list(stat            = stat_all,
