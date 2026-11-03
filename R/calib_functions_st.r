@@ -172,7 +172,7 @@ notif_age_us_5yr_lLik_st <- function(V,st,rho=0.1) { # V = table of us notificat
   V3<-matrix(0,5,10)
   V3[1,]<-colSums(V2[1:5,]);V3[2,]<-colSums(V2[6:10,]);V3[3,]<-colSums(V2[11:15,]); V3[4,]<-colSums(V2[16:20,]); V3[5,]<-colSums(V2[21:25,])
   ### Check for missing calibration data
-  if (sum(is.na(notif_age_us_5yr > 0))) {
+  if (sum(is.na(notif_age_us_5yr)) > 0) {
     ### Initialize the likelihood value to zero
     tot_lik <- 0; adj_2a <-0
     ### If data is missing we need to create a single new bucket for these data and estimates
@@ -180,7 +180,6 @@ notif_age_us_5yr_lLik_st <- function(V,st,rho=0.1) { # V = table of us notificat
     cn              <- CalibDatCases$cases_nat_st_5yr
     notif_age_us0   <- cn[cn$State.Code==st & cn$usb==1,nat_5yr_bucket_cols(cn)]
     for (i in 1:nrow(notif_age_us_5yr)){
-      print(i)
       ### Check that this row has an NA
       if (sum(is.na(notif_age_us_5yr[i,])) > 0){
         ### Calibration data
@@ -195,16 +194,16 @@ notif_age_us_5yr_lLik_st <- function(V,st,rho=0.1) { # V = table of us notificat
         ### Model estimates (match to estimates)
         ### Create a sum of the estimates that correspond to missing age groups
         known_est   <- V3[i,-index]
-        missing_est <- sum(V3) - sum(known_est)
+        missing_est <- sum(V3[i,]) - sum(known_est)
         tot_est <- c(known_est, missing_est)
       } else {
         tot_est <- V3[i,]
         tot_cases <- notif_age_us_5yr[i,]
       }
       adj_2a  <- adj_2a +  dDirMult(M=tot_cases+0.01,n=tot_cases,Rho=rho)*wts[idx_5yr_end][i]
-      print(adj_2a)
       tot_lik <- tot_lik + dDirMult(M=tot_est*1e6,n=tot_cases,Rho=rho)*wts[idx_5yr_end][i]
       }
+    tot_lik <- tot_lik - adj_2a
   } else {
     adj_2a            <- sum(dDirMult(M=notif_age_us_5yr+0.01,n=notif_age_us_5yr,Rho=rho)*wts[idx_5yr_end])
     #scale does not matter for dirichlet llikelihood
@@ -246,7 +245,7 @@ notif_age_nus_5yr_lLik_st <- function(V,st,rho=0.1) { # V = table of us notifica
         ### Model estimates (match to estimates)
         ### Create a sum of the estimates that correspond to missing age groups
         known_est   <- V3[i,-index]
-        missing_est <- sum(V3) - sum(known_est)
+        missing_est <- sum(V3[i,]) - sum(known_est)
         tot_est <- c(known_est, missing_est)
       } else {
         tot_est <- V3[i,]
@@ -255,6 +254,7 @@ notif_age_nus_5yr_lLik_st <- function(V,st,rho=0.1) { # V = table of us notifica
       adj_2a  <- adj_2a +  dDirMult(M=tot_cases+0.01,n=tot_cases,Rho=rho)*wts[idx_5yr_end][i]
       tot_lik <- tot_lik + dDirMult(M=tot_est*1e6,n=tot_cases,Rho=rho)*wts[idx_5yr_end][i]
     }
+    tot_lik <- tot_lik - adj_2a
   } else {
     adj_2a            <- sum(dDirMult(M=notif_age_nus_5yr+0.01,n=notif_age_nus_5yr,Rho=rho)*wts[idx_5yr_end])
     #scale does not matter for dirichlet llikelihood
