@@ -236,8 +236,9 @@ get_stateID <- function() {
 
 #' Resolve a location code to its lookup entry
 #'
-#' Checks stateID first, then falls back to county_ID.csv for sub-state
-#' locations. Pure lookup — does not modify global state. Use
+#' Checks county_ID.csv first, then stateID, so a county registered in
+#' stateID by an earlier \code{model_load} still resolves as a county.
+#' Pure lookup — does not modify global state. Use
 #' \code{register_location} to add county entries to stateID at runtime.
 #'@name resolve_location
 #'@param loc Location code (USPS abbreviation, county code, or FIPS)
@@ -250,12 +251,6 @@ resolve_location<-function(loc){
     return(list(name="United States",fips="0",code="US",
                 loc_type="national",st=0))
   }
-  # check stateID by USPS code (includes any previously registered counties)
-  idx<-which(StateID$USPS==loc)
-  if(length(idx)>0){
-    return(list(name=StateID$Name[idx],fips=StateID$FIPS[idx],
-                code=loc,loc_type="state",st=idx))
-  }
   # check county_ID.csv
   county_file<-system.file("extdata","county_ID.csv",package="MITUS")
   if(nchar(county_file)>0 && file.exists(county_file)){
@@ -267,6 +262,12 @@ resolve_location<-function(loc){
                   code=county$Code,loc_type="county",st=NA,
                   state_fips=county$StateFIPS))
     }
+  }
+  # check stateID by USPS code
+  idx<-which(StateID$USPS==loc)
+  if(length(idx)>0){
+    return(list(name=StateID$Name[idx],fips=StateID$FIPS[idx],
+                code=loc,loc_type="state",st=idx))
   }
   return(NULL)
 }

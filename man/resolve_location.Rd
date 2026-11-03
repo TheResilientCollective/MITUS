@@ -13,7 +13,8 @@ resolve_location(loc)
 List with name, fips, code, loc_type, st. NULL if not found.
 }
 \description{
-Checks stateID first, then falls back to county_ID.csv for sub-state
-locations. Pure lookup — does not modify global state. Use
+Checks county_ID.csv first, then stateID, so a county registered in
+stateID by an earlier \code{model_load} still resolves as a county.
+Pure lookup — does not modify global state. Use
 \code{register_location} to add county entries to stateID at runtime.
 }
