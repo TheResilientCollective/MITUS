@@ -83,7 +83,6 @@ optim_b_st <- function(df, samp_i=1,n_cores=2,loc="MA", TB=1,calib_end_year=2021
   }
 
   b<-samp_i
-  # for (i in min(b, nrow(StartVal))){
   o1  <- optim(df1, posterior_st, method ="BFGS", control=list(maxit=400,trace=5,reltol=sqrt(.Machine$double.eps)/5)) ; o1$value
   save(o1,file=paste("Opt_",loc,"_r1_", b,"_", Sys.Date(),".rda",sep=""))
   o2  <- optim(o1$par,posterior_st, method ="Nelder-Mead", control=list(maxit=1000,trace=1,reltol=sqrt(.Machine$double.eps)/5));  o2$value
@@ -98,11 +97,8 @@ optim_b_st <- function(df, samp_i=1,n_cores=2,loc="MA", TB=1,calib_end_year=2021
   save(o6,file=paste("Opt_",loc,"_r6_", b,"_", Sys.Date(),".rda",sep=""))
   o7  <- optim(o6$par, posterior_st, method ="BFGS", control=list(maxit=400,trace=5,reltol=sqrt(.Machine$double.eps)/5)) ; o7$value
   save(o7,file=paste("Opt_",loc,"_r7_", b,"_", Sys.Date(),".rda",sep=""))
-  o8  <- optim(o5$par ,posterior_st, method ="Nelder-Mead", control=list(maxit=1000,trace=1,reltol=sqrt(.Machine$double.eps)/5));  o8$value
+  o8  <- optim(o7$par ,posterior_st, method ="Nelder-Mead", control=list(maxit=1000,trace=1,reltol=sqrt(.Machine$double.eps)/5));  o8$value
   save(o8,file=paste("Opt_",loc,"_r8_", b,"_", Sys.Date(),".rda",sep=""))
-  o9  <- optim(o6$par, posterior_st, method ="BFGS", control=list(maxit=400,trace=5,reltol=sqrt(.Machine$double.eps)/5)) ; o9$value
+  o9  <- optim(o8$par, posterior_st, method ="BFGS", control=list(maxit=400,trace=5,reltol=sqrt(.Machine$double.eps)/5)) ; o9$value
   save(o9,file=paste("Opt_",loc,"_r9_", b,"_", Sys.Date(),".rda",sep=""))
-  # o8 <- UnivOptim(o7$par) ; o8$value
-  # save(o8,file=paste("Opt_ST_r8_", b,"_", Sys.Date(),".rda",sep=""))
-  # }
 }
