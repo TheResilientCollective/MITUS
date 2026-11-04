@@ -64,15 +64,22 @@ b<-samp_i
 #'@param loc USPS code of state
 #'@param TB boolean for TB likelihoods
 #'@param n_cores
-#'@param calib_end_year end year for calibration targets
+#'@param calib_end_year last simulated year; NULL simulates through the last
+#'  year of the importance weights set by \code{model_load}
 #'@return 8 datasets from optimization loop
 #'@export
 
 
-optim_b_st <- function(df, samp_i=1,n_cores=2,loc="MA", TB=1,calib_end_year=2021){
-  # data("StartVal_2018-08-06", package = "MITUS")
-  posterior_st = function(theta) {
-    -lprior(theta) - llikelihood_st(theta,loc,n_cores, TB=TB,calib_end_year=calib_end_year)
+optim_b_st <- function(df,
+                       samp_i = 1,
+                       n_cores = 2,
+                       loc = "MA",
+                       TB = 1,
+                       calib_end_year = NULL) {
+  calib_end_year <- resolve_calib_end_year(calib_end_year)
+  posterior_st <- function(theta) {
+    -lprior(theta) - llikelihood_st(theta, loc, n_cores, TB = TB,
+                                    calib_end_year = calib_end_year)
   }
 
   if(min(dim(as.data.frame(df)))==1) {

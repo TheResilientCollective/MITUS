@@ -57,6 +57,28 @@ make_impt_weights <- function(last_year    = 2019,
   wts
 }
 
+#' Last simulated year for a calibration run.
+#'
+#' The likelihood reads simulator output for every year in \code{names(wts)},
+#' so the simulation must run at least through the last weighted year.
+#'
+#'@param calib_end_year Last simulated year, or NULL for the last year of the
+#'  importance weights \code{wts} set by \code{model_load}
+#'@return Integer calendar year
+#'@noRd
+resolve_calib_end_year <- function(calib_end_year = NULL) {
+  last_weight_year <- max(as.integer(names(wts)))
+  if (is.null(calib_end_year)) {
+    return(last_weight_year)
+  }
+  if (calib_end_year < last_weight_year) {
+    stop("calib_end_year (", calib_end_year, ") is before the last weighted year (",
+         last_weight_year, "); simulate through at least that year or lower ",
+         "last_weight_year in model_load()")
+  }
+  as.integer(calib_end_year)
+}
+
 #' Find a location-specific data file
 #'
 #' Searches for RDS files matching {loc}_{filetype}[_.]*.rds. When data_dir

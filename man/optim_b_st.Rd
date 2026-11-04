@@ -17,7 +17,7 @@ optim_b_st(
   n_cores = 2,
   loc = "MA",
   TB = 1,
-  calib_end_year = 2021
+  calib_end_year = NULL
 )
 }
 \arguments{
@@ -29,7 +29,8 @@ optim_b_st(
 
 \item{TB}{boolean for TB likelihoods}
 
-\item{calib_end_year}{end year for calibration targets}
+\item{calib_end_year}{last simulated year; NULL simulates through the last
+year of the importance weights set by \code{model_load}}
 }
 \value{
 8 datasets from optimization loop

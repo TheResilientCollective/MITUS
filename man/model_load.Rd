@@ -14,9 +14,9 @@ model_load(loc = "US", data_dir = NULL, last_weight_year = 2019)
 \item{last_weight_year}{last calendar year covered by the calibration
 importance weights \code{wts}. Likelihoods that take their year window from
 the calibration data use only the data years present in \code{names(wts)},
-so this sets the most recent year of data those targets can use. It should
-not exceed the \code{calib_end_year} used for calibration, which bounds the
-years available in the simulator output.}
+so this sets the most recent year of data those targets can use.
+Calibration simulates through this year unless a later
+\code{calib_end_year} is given.}
 }
 \value{
 void

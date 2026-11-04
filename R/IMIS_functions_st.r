@@ -1,7 +1,12 @@
 ###################### Par = par_1
 # Function for calculating likelihood
 
-llikelihoodZ_st <-  function(samp_i,ParMatrix,loc, TB=1, calib_end_year=2021) { # ParMatrix = ParInit
+llikelihoodZ_st <- function(samp_i,
+                            ParMatrix,
+                            loc,
+                            TB = 1,
+                            calib_end_year = NULL) {
+  calib_end_year <- resolve_calib_end_year(calib_end_year)
   stateID <- get_stateID()
   StateID<-as.data.frame(stateID)
   if(min(dim(as.data.frame(ParMatrix)))==1) {
@@ -267,10 +272,16 @@ llikelihoodZ_st <-  function(samp_i,ParMatrix,loc, TB=1, calib_end_year=2021) { 
 
 
 ###################### local parallelization via multicore
-llikelihood_st <- function(ParMatrix,loc,n_cores=1, TB=1, calib_end_year=2021) {
-  if(dim(as.data.frame(ParMatrix))[2]==1) {
-    lLik <- llikelihoodZ_st(1,t(as.data.frame(ParMatrix)),loc=loc, TB=TB, calib_end_year=calib_end_year)
-    } else {
-      lLik <- unlist(mclapply(1:nrow(ParMatrix),llikelihoodZ_st,ParMatrix=ParMatrix,loc=loc,mc.cores=n_cores, TB=TB, calib_end_year=calib_end_year))
-    }
-  return((lLik)) }
+llikelihood_st <- function(ParMatrix, loc, n_cores = 1, TB = 1, calib_end_year = NULL) {
+  calib_end_year <- resolve_calib_end_year(calib_end_year)
+  if (dim(as.data.frame(ParMatrix))[2] == 1) {
+    lLik <- llikelihoodZ_st(1, t(as.data.frame(ParMatrix)), loc = loc, TB = TB,
+                            calib_end_year = calib_end_year)
+  } else {
+    lLik <- unlist(mclapply(seq_len(nrow(ParMatrix)), llikelihoodZ_st,
+                            ParMatrix = ParMatrix, loc = loc,
+                            mc.cores = n_cores, TB = TB,
+                            calib_end_year = calib_end_year))
+  }
+  lLik
+}
