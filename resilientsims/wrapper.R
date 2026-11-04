@@ -67,7 +67,10 @@
 #'   - samp_i: First StartVal_st row to use; runs use rows samp_i..samp_i+n_runs-1
 #'       (default: 1)
 #'   - TB: Include TB likelihoods (default: 1)
-#'   - calib_end_year: Last year of calibration targets (default: 2021)
+#'   - last_weight_year: Last year of calibration targets, passed to model_load()
+#'       (default: the model_load() default)
+#'   - calib_end_year: Last simulated year (default: last_weight_year). Must not
+#'       be before last_weight_year.
 #'   scenario
 #'   - name: Scenario name shown in the hub (required)
 #'   - prg_chng: care cascade fields (any subset): start_yr, scrn_cov, IGRA_frc,
@@ -150,16 +153,21 @@ configured_parameters <- function(loc, input_dir) {
        source = basename(find_loc_file(loc, "Param", data_dir = input_dir)))
 }
 
-run_calibrate <- function(params, loc, output_dir, n_cores, n_parallel) {
+run_calibrate <- function(params, loc, output_dir, n_cores, n_parallel,
+                          last_weight_year) {
   samp_i <- int_param(params, "samp_i", 1)
   n_runs <- int_param(params, "n_runs", 15)
   TB <- if (!is.null(params$TB)) params$TB else 1
-  calib_end_year <- int_param(params, "calib_end_year", 2021)
+  calib_end_year <- if (!is.null(params$calib_end_year)) {
+    int_param(params, "calib_end_year", NA)
+  }
+  calib_end_year <- MITUS:::resolve_calib_end_year(calib_end_year)
 
   cat("  Optimization runs:", n_runs, "\n")
   cat("  First starting value:", samp_i, "\n")
   cat("  TB likelihoods:", TB, "\n")
-  cat("  Calibration end year:", calib_end_year, "\n")
+  cat("  Last weighted year:", last_weight_year, "\n")
+  cat("  Last simulated year:", calib_end_year, "\n")
   cat("\n=== Running Multi-Start Calibration ===\n")
   cat("This may take days for a state or sub-state location...\n\n")
 
@@ -170,7 +178,8 @@ run_calibrate <- function(params, loc, output_dir, n_cores, n_parallel) {
   results <- list(runs = calibration$runs)
   results$summary <- list(
     mode = "calibrate", location = loc, n_runs = n_runs, first_start_value = samp_i,
-    n_parallel = n_parallel, n_cores = n_cores, TB = TB, calib_end_year = calib_end_year,
+    n_parallel = n_parallel, n_cores = n_cores, TB = TB,
+    last_weight_year = last_weight_year, calib_end_year = calib_end_year,
     runs_usable = if (is.null(calibration$map)) 0 else calibration$n_usable,
     optimization_complete = !is.null(calibration$map))
 
@@ -297,13 +306,16 @@ main <- function() {
   cat("Loading MITUS package...\n")
   library(MITUS)
 
+  last_weight_year <- int_param(params, "last_weight_year",
+                                formals(model_load)$last_weight_year)
   cat("\nLoading MITUS model for location:", loc, "\n")
-  model_load(loc = loc, data_dir = input_dir)
+  model_load(loc = loc, data_dir = input_dir, last_weight_year = last_weight_year)
   cat("MITUS model loaded successfully\n")
   if (exists("Par") && !is.null(Par)) cat("  Par dimensions:", dim(Par), "\n")
 
   results <- switch(mode,
-    calibrate = run_calibrate(params, loc, output_dir, n_cores, n_parallel),
+    calibrate = run_calibrate(params, loc, output_dir, n_cores, n_parallel,
+                              last_weight_year),
     package   = run_package(params, loc, input_dir, output_dir, n_parallel),
     scenario  = run_scenario_mode(params, loc, input_dir, output_dir, n_cores))
 
