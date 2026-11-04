@@ -1,17 +1,21 @@
-#'loads data for the geography of interest
-#'@name model_load
-#'@param loc two letter postal abbreviation for states; US for national
-#'@param data_dir optional external data directory to search before package inst/
-#'@param last_weight_year last calendar year covered by the calibration
-#'  importance weights \code{wts}. Likelihoods that take their year window from
-#'  the calibration data use only the data years present in \code{names(wts)},
-#'  so this sets the most recent year of data those targets can use.
-#'  Calibration simulates through this year unless a later
-#'  \code{calib_end_year} is given.
-#'@return void
-model_load<-function(loc="US",data_dir=NULL,last_weight_year=2019){
-#' add loc as a global variable
-# loc<<-loc
+#' Load calibration data and inputs for a location
+#'
+#' Reads the location's calibration data, model inputs and parameter files
+#' into the global environment, and sets the importance weights \code{wts}.
+#'
+#' @name model_load
+#' @param loc location code: \code{"US"}, a state USPS code, or a county code
+#'   from \code{county_ID.csv}
+#' @param data_dir optional external data directory to search before package
+#'   inst/
+#' @param last_weight_year last calendar year covered by the calibration
+#'   importance weights \code{wts}. Likelihoods that take their year window from
+#'   the calibration data use only the data years present in \code{names(wts)},
+#'   so this sets the most recent year of data those targets can use.
+#'   Calibration simulates through this year unless a later
+#'   \code{calib_end_year} is given.
+#' @return NULL, invisibly
+model_load <- function(loc = "US", data_dir = NULL, last_weight_year = 2019) {
   library(mnormt)
   library(parallel)
   library(lhs)
@@ -33,8 +37,7 @@ model_load<-function(loc="US",data_dir=NULL,last_weight_year=2019){
   # value from a prior model_load call doesn't bleed through.
   assign("data_dir", data_dir, envir = .mitus_state)
 
-#'load necessary datasets
-#'Model Input
+# load necessary datasets
 if (loc=="US"){
   CalibDat<<-readRDS(find_loc_file("US","CalibDat",data_dir=data_dir))
   CalibDatCases<<-CalibDat

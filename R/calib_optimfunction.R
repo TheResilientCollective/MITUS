@@ -50,24 +50,26 @@ b<-samp_i
 # }
 }
 
-#'This function is used to run a optimization on the input parameters.
-#'The only input to the function is a "batch number" which will determine
-#'which row of the starting values dataframe the optimization will use.
-#'It will return 8 datasets of the optimized parameters --one from each
-#'optimization step. The final (8th) optimization step is an univariate
-#'optimization.
-#'The function requires the use of the ParamInit Rdata file and the
-#'StartValues Rdata file.
-#'@name optim_b_st
-#'@param df dataframe or matrix of starting values data frame
-#'@param samp_i which rows of the data frame to use
-#'@param loc USPS code of state
-#'@param TB boolean for TB likelihoods
-#'@param n_cores
-#'@param calib_end_year last simulated year; NULL simulates through the last
-#'  year of the importance weights set by \code{model_load}
-#'@return 8 datasets from optimization loop
-#'@export
+#' Optimize sub-national parameters from one starting point
+#'
+#' Runs nine rounds of \code{optim} on the negative log posterior, alternating
+#' BFGS and Nelder-Mead, each round starting from the previous round's result.
+#' Requires the globals set by \code{model_load}.
+#'
+#' @name optim_b_st
+#' @param df starting values on the standard normal scale, as a named vector or
+#'   as a matrix with one row per starting point
+#' @param samp_i row of \code{df} to start from, also used in the saved file
+#'   names
+#' @param n_cores number of cores passed to \code{llikelihood_st}
+#' @param loc location code: a state USPS code or a county code loaded by
+#'   \code{model_load}
+#' @param TB 1 to include the TB likelihood terms, 0 for demographic terms only
+#' @param calib_end_year last simulated year; NULL simulates through the last
+#'   year of the importance weights set by \code{model_load}
+#' @return NULL, invisibly. Each round's \code{optim} result is saved to the
+#'   working directory as \code{Opt_<loc>_r<round>_<samp_i>_<date>.rda}.
+#' @export
 
 
 optim_b_st <- function(df,

@@ -2,14 +2,7 @@
 % Please edit documentation in R/calib_optimfunction.R
 \name{optim_b_st}
 \alias{optim_b_st}
-\title{This function is used to run a optimization on the input parameters.
-The only input to the function is a "batch number" which will determine
-which row of the starting values dataframe the optimization will use.
-It will return 8 datasets of the optimized parameters --one from each
-optimization step. The final (8th) optimization step is an univariate
-optimization.
-The function requires the use of the ParamInit Rdata file and the
-StartValues Rdata file.}
+\title{Optimize sub-national parameters from one starting point}
 \usage{
 optim_b_st(
   df,
@@ -21,27 +14,28 @@ optim_b_st(
 )
 }
 \arguments{
-\item{df}{dataframe or matrix of starting values data frame}
+\item{df}{starting values on the standard normal scale, as a named vector or
+as a matrix with one row per starting point}
 
-\item{samp_i}{which rows of the data frame to use}
+\item{samp_i}{row of \code{df} to start from, also used in the saved file
+names}
 
-\item{loc}{USPS code of state}
+\item{n_cores}{number of cores passed to \code{llikelihood_st}}
 
-\item{TB}{boolean for TB likelihoods}
+\item{loc}{location code: a state USPS code or a county code loaded by
+\code{model_load}}
+
+\item{TB}{1 to include the TB likelihood terms, 0 for demographic terms only}
 
 \item{calib_end_year}{last simulated year; NULL simulates through the last
 year of the importance weights set by \code{model_load}}
 }
 \value{
-8 datasets from optimization loop
+NULL, invisibly. Each round's \code{optim} result is saved to the
+  working directory as \code{Opt_<loc>_r<round>_<samp_i>_<date>.rda}.
 }
 \description{
-This function is used to run a optimization on the input parameters.
-The only input to the function is a "batch number" which will determine
-which row of the starting values dataframe the optimization will use.
-It will return 8 datasets of the optimized parameters --one from each
-optimization step. The final (8th) optimization step is an univariate
-optimization.
-The function requires the use of the ParamInit Rdata file and the
-StartValues Rdata file.
+Runs nine rounds of \code{optim} on the negative log posterior, alternating
+BFGS and Nelder-Mead, each round starting from the previous round's result.
+Requires the globals set by \code{model_load}.
 }

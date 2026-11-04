@@ -2,14 +2,16 @@
 % Please edit documentation in R/data_loadmodel.R
 \name{model_load}
 \alias{model_load}
-\title{loads data for the geography of interest}
+\title{Load calibration data and inputs for a location}
 \usage{
 model_load(loc = "US", data_dir = NULL, last_weight_year = 2019)
 }
 \arguments{
-\item{loc}{two letter postal abbreviation for states; US for national}
+\item{loc}{location code: \code{"US"}, a state USPS code, or a county code
+from \code{county_ID.csv}}
 
-\item{data_dir}{optional external data directory to search before package inst/}
+\item{data_dir}{optional external data directory to search before package
+inst/}
 
 \item{last_weight_year}{last calendar year covered by the calibration
 importance weights \code{wts}. Likelihoods that take their year window from
@@ -19,11 +21,9 @@ Calibration simulates through this year unless a later
 \code{calib_end_year} is given.}
 }
 \value{
-void
-add loc as a global variable
-load necessary datasets
-Model Input
+NULL, invisibly
 }
 \description{
-loads data for the geography of interest
+Reads the location's calibration data, model inputs and parameter files
+into the global environment, and sets the importance weights \code{wts}.
 }
