@@ -238,13 +238,9 @@ llikelihoodZ_st <- function(samp_i,
     v17b  <- M[,30]
     addlik <- tot_pop_yr_us_lLik_st(V=v17b,st=st); addlik
     lLik <- lLik + addlik
-    ### ### ### TOTAL POP AGE DISTRIBUTION 2019  ### ### ### ### ### ### D
-    # v18a  <- cbind(M[year_to_idx(2019),33:43],M[year_to_idx(2019),44:54])
-    # addlik <- tot_pop19_ag_fb_lLik_st(V=v18,st=st); addlik
-    # lLik <- lLik + addlik
-    ### ### ### TOTAL POP AGE DISTRIBUTION 2017-2019  ### ### ### ### ### ### D
-    v18  <- cbind(colSums(M[year_to_idx(2017):year_to_idx(2019),33:43]),colSums(M[year_to_idx(2017):year_to_idx(2019),44:54]))
-    addlik <- tot_pop1719_ag_fb_lLik_st(V=v18,st=st); addlik
+    ### ### ### TOTAL POP AGE DISTRIBUTION, LATEST YEARS  ### ### ### ### ### D
+    addlik <- tot_pop_ag_fb_lLik_st(V_us = M[, 33:43], V_nus = M[, 44:54],
+                                    st = st)
     lLik <- lLik + addlik
     #' ### ### ### HOMELESS POP 2010  ### ### ### ### ### ###
     v23b  <- M[year_to_idx(2010),29]

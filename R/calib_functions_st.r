@@ -7,7 +7,6 @@
 # Calibration year index constants (year_to_idx: yr-1950+1)
 idx_5yr_end<-c(49,54,59,64,70)   # 1998,2003,2008,2013,2019
 idx_5yr_start<-c(45,50,55,60,65) # 1994,1999,2004,2009,2014
-idx_decades<-c(11,21,31,41,51,61,70) # 1960,1970,1980,1990,2000,2010,2019
 
 # Accessors for the calibration data, keyed on the names each table carries.
 
@@ -35,6 +34,30 @@ dba_year_rows <- function(m, years) {
 #' Column of DeathByAge[[st]] holding deaths totalled across age groups.
 #' @noRd
 dba_total_col <- function(m) ncol(m)
+
+#' Years of the annual population table pop_00_19 that fall within the
+#' importance weights, oldest first.
+#' @noRd
+pop_annual_years <- function(d) {
+  yrs <- suppressWarnings(as.integer(colnames(d)))
+  sort(yrs[!is.na(yrs) & yrs %in% as.integer(names(wts))])
+}
+
+#' Population targets for one nativity group: the census decades of pop_50_10
+#' after the first, which is the model's starting population, then the latest
+#' weighted year of pop_00_19. ci_scale is the last census decade's population.
+#' @noRd
+pop_total_targets <- function(st, usb) {
+  dec <- CalibDatState[["pop_50_10"]][[st]]
+  dec <- dec[dec[, "usb"] == usb, , drop = FALSE]
+  dec <- dec[order(dec[, "year"]), , drop = FALSE][-1, , drop = FALSE]
+  ann <- CalibDatState[["pop_00_19"]][[st]]
+  latest <- max(pop_annual_years(ann))
+  ann <- ann[ann[, "usb"] == usb & ann[, "age_group"] != 11, , drop = FALSE]
+  list(years = c(as.integer(dec[, "year"]), latest),
+       pop = c(as.numeric(dec[, "pop"]), sum(ann[, as.character(latest)])),
+       ci_scale = as.numeric(dec[nrow(dec), "pop"]))
+}
 
 #'Total Diagnosed Cases 1953-2016
 #'Motivation: Normal, mean centered with CI = +/- 5% of the mean
@@ -422,27 +445,17 @@ tb_dth_age_lLik_st <- function(V,rho=0.005) { # V = simulator TB-death output fo
   sum(dDirMult(M = V2, n = tb_deaths_age, Rho = rho) * wt_slice) - adj_19b
 }
 ### ### ### TOTAL POP EACH DECADE, FOR FB  ### ### ### ### ### ###  D
-# Motivation: norm, mean centered with CI = +/- 2 million wts[1+0:6*10]
+# Motivation: norm, mean centered with CI = +/- 5% of the last census decade
 
-tot_pop_yr_fb_lLik_st <- function(V,st) { # V = total pop (rows=year, cols=us, fb)
-  tot_pop_yr      <- CalibDatState[["pop_50_10"]][[st]]
-  tot_pop_yr_fb   <- tot_pop_yr[tot_pop_yr[,2]==0,]
-  #get 2019 population
-  pop_ag_11_190  <- CalibDatState[["pop_00_19"]][[st]][,c("age_group","usb","2019")]
-  #get 2019 fb population
-  pop_ag_11_19nus <-sum(pop_ag_11_190[pop_ag_11_190[,2]==0,3][-11])
-  #append the foreign born population
-  tot_pop_yr_fb   <- c(tot_pop_yr_fb[,-c(1:2)], pop_ag_11_19nus)
-  # if (loc != "HI" & loc != "AK"){
-  adj_17          <- sum(dnorm(tot_pop_yr_fb[-1],tot_pop_yr_fb[-1],tot_pop_yr_fb[7]*0.05/1.96,log=T)*wts[idx_decades])
+tot_pop_yr_fb_lLik_st <- function(V, st) { # V = NUSB pop, all simulated years
+  tg <- pop_total_targets(st, usb = 0)
+  wt <- wts[as.character(tg$years)]
+  sd <- tg$ci_scale * 0.05 / 1.96
+  adj_17 <- sum(dnorm(tg$pop, tg$pop, sd, log = TRUE) * wt)
   #total population is in real numbers so we need to scale up output
-  sum(dnorm(tot_pop_yr_fb[-1],V[idx_decades]*1e6,tot_pop_yr_fb[7]*0.05/1.96,log=T)*wts[idx_decades]) - adj_17}
-  # else{
-  #   adj_17          <- sum(dnorm(tot_pop_yr_fb,tot_pop_yr_fb,tot_pop_yr_fb[7]*0.1/1.96,log=T)*wts[c(1+1:6*10,68)])
-  #   #total population is in real numbers so we need to scale up output
-  #   sum(dnorm(tot_pop_yr_fb[-1],V[c(11,21,31,41,51,61,68)]*1e6,tot_pop_yr_fb[7]*0.1/1.96,log=T)*wts[c(1+1:6*10,68)]) - adj_17
-  # }
-# }
+  sim <- V[year_to_idx(tg$years)] * 1e6
+  sum(dnorm(tg$pop, sim, sd, log = TRUE) * wt) - adj_17
+}
 ### D
 tot_pop_yr_us_lLik_st_00_10 <- function(V,st) {
   tot_pop_yr      <- CalibDatState[["pop_50_10"]][[st]]
@@ -453,49 +466,35 @@ tot_pop_yr_us_lLik_st_00_10 <- function(V,st) {
   adj_17b        <- sum(dnorm(tot_pop_yr_us[6:7],tot_pop_yr_us[6:7],tot_pop_yr_us[7]*0.05/1.96,log=T)*wts[c(year_to_idx(2000), year_to_idx(2010))])
   sum(dnorm(tot_pop_yr_us[6:7],V[c(year_to_idx(2000), year_to_idx(2010))]*1e6,tot_pop_yr_us[7]*0.05/1.96,log=T)*wts[c(year_to_idx(2000), year_to_idx(2010))]) - adj_17b  } # CI = +/- 2mil
 
-tot_pop_yr_us_lLik_st <- function(V,st) {
-
-  tot_pop_yr      <- CalibDatState[["pop_50_10"]][[st]]
-  tot_pop_yr_us   <- tot_pop_yr[tot_pop_yr[,2]==1,]
-  #get 2019 population
-  pop_ag_11_190  <- CalibDatState[["pop_00_19"]][[st]][,c("age_group","usb","2019")]
-  #get 2019 fb population
-  pop_ag_11_19us <-sum(pop_ag_11_190[pop_ag_11_190[,2]==1,3][-11])
-  #append the foreign born population
-  tot_pop_yr_us   <- c(tot_pop_yr_us[,-c(1:2)], pop_ag_11_19us)
-  adj_17          <- sum(dnorm(tot_pop_yr_us[-1],tot_pop_yr_us[-1],tot_pop_yr_us[7]*0.05/1.96,log=T)*wts[idx_decades])
+tot_pop_yr_us_lLik_st <- function(V, st) { # V = USB pop, all simulated years
+  tg <- pop_total_targets(st, usb = 1)
+  wt <- wts[as.character(tg$years)]
+  sd <- tg$ci_scale * 0.05 / 1.96
+  adj_17 <- sum(dnorm(tg$pop, tg$pop, sd, log = TRUE) * wt)
   #total population is in real numbers so we need to scale up output
-  sum(dnorm(tot_pop_yr_us[-1],V[idx_decades]*1e6,tot_pop_yr_us[7]*0.05/1.96,log=T)*wts[idx_decades]) - adj_17}
-
-### ### ### TOTAL POP AGE DISTRIBUTION 2017  ### ### ### ### ### ### D
-# Motivation: reported estimates represent pseudo-data for a multinomial likelihood, with ESS = 500
-tot_pop19_ag_fb_lLik_st <- function(V,st,ESS=500) { # V =  US pop in 2014 (row=11 ages, col= us, fb)
-  pop_ag_11_190  <- CalibDatState[["pop_00_19"]][[st]][,c("age_group","usb","2019")]
-  pop_ag_11_19us <-pop_ag_11_190[pop_ag_11_190[,2]==1,3][-11]
-  pop_ag_11_19nus <-pop_ag_11_190[pop_ag_11_190[,2]==0,3][-11]
-
-  pop_ag_11_19   <- cbind(pop_ag_11_19us/sum(pop_ag_11_19us)+.001, pop_ag_11_19nus/sum(pop_ag_11_19nus)+.001)
-  adj_18         <- (sum(log(pop_ag_11_19[,1])*pop_ag_11_19[,1])+sum(log(pop_ag_11_19[,2])*pop_ag_11_19[,2]))*ESS
-  V1 <- rbind(V[1:9,],V[10,]+V[11,])
-  V2<-cbind(V1[,1]/sum(V1[,1]),V1[,2]/sum(V1[,2]))
-  (sum(log(V2[,1])*pop_ag_11_19[,1])+sum(log(V2[,2])*pop_ag_11_19[,2]))*ESS - adj_18
+  sim <- V[year_to_idx(tg$years)] * 1e6
+  sum(dnorm(tg$pop, sim, sd, log = TRUE) * wt) - adj_17
 }
 
-### ### ### TOTAL POP AGE DISTRIBUTION 2017  ### ### ### ### ### ### D
+### ### ### TOTAL POP AGE DISTRIBUTION, LATEST YEARS  ### ### ### ### ### ### D
 # Motivation: reported estimates represent pseudo-data for a multinomial likelihood, with ESS = 500
-tot_pop1719_ag_fb_lLik_st <- function(V,st,ESS=500) { # V =  US pop in 2014 (row=11 ages, col= us, fb)
-  pop_ag_11_190  <- CalibDatState[["pop_00_19"]][[st]][,c("age_group","usb","2017","2018","2019")]
-  pop_ag_11_19us <- rowSums(pop_ag_11_190[pop_ag_11_190[,2]==1,3:5])[-11]
-  #top code at 75p
-  # pop_ag_11_19us[9] <- pop_ag_11_19us[9] + pop_ag_11_19us[10]
-  # pop_ag_11_19us <- pop_ag_11_19us[-10]
-  pop_ag_11_19nus <-rowSums(pop_ag_11_190[pop_ag_11_190[,2]==0,3:5])[-11]
-  #top code at 75p
-  pop_ag_11_19   <- cbind(pop_ag_11_19us/sum(pop_ag_11_19us), pop_ag_11_19nus/sum(pop_ag_11_19nus))
-  adj_18         <- (sum(log(pop_ag_11_19[,1])*pop_ag_11_19[,1])+sum(log(pop_ag_11_19[,2])*pop_ag_11_19[,2]))*ESS
-  V1 <- rbind(V[1:9,],V[10,]+V[11,])
-  V2<-cbind(V1[,1]/sum(V1[,1]),V1[,2]/sum(V1[,2]))
-  (sum(log(V2[,1])*pop_ag_11_19[,1])+sum(log(V2[,2])*pop_ag_11_19[,2]))*ESS - adj_18
+tot_pop_ag_fb_lLik_st <- function(V_us, V_nus, st, ESS = 500, n_years = 3) {
+  # V_us, V_nus = USB and NUSB pop by age, all simulated years (cols = 11 ages)
+  ann <- CalibDatState[["pop_00_19"]][[st]]
+  yrs <- tail(pop_annual_years(ann), n_years)
+  ann <- ann[ann[, "age_group"] != 11, , drop = FALSE]
+  pop_us <- rowSums(ann[ann[, "usb"] == 1, as.character(yrs), drop = FALSE])
+  pop_nus <- rowSums(ann[ann[, "usb"] == 0, as.character(yrs), drop = FALSE])
+  pop_ag <- cbind(pop_us / sum(pop_us), pop_nus / sum(pop_nus))
+  adj_18 <- (sum(log(pop_ag[, 1]) * pop_ag[, 1]) +
+             sum(log(pop_ag[, 2]) * pop_ag[, 2])) * ESS
+  V <- cbind(colSums(V_us[year_to_idx(yrs), , drop = FALSE]),
+             colSums(V_nus[year_to_idx(yrs), , drop = FALSE]))
+  #top code at 85p
+  V1 <- rbind(V[1:9, ], V[10, ] + V[11, ])
+  V2 <- cbind(V1[, 1] / sum(V1[, 1]), V1[, 2] / sum(V1[, 2]))
+  (sum(log(V2[, 1]) * pop_ag[, 1]) +
+   sum(log(V2[, 2]) * pop_ag[, 2])) * ESS - adj_18
 }
 
 #' TOTAL ALL-CAUSE DEATHS, MOST RECENT AVAILABLE YEAR
