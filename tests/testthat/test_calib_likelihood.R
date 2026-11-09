@@ -269,8 +269,8 @@ test_that("the homeless population term compares the 2010 population", {
   )
 })
 
-# The expected values are what the state likelihood llikelihood_st, which this
-# code replaces, gives for the same parameters.
+# The expected values are what the earlier state likelihood, llikelihood_st,
+# gave for the same parameters.
 test_that("California's calibrated parameters give the state likelihood", {
   skip_on_cran()
   local_model_load("CA")
