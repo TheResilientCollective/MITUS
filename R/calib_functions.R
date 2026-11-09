@@ -225,16 +225,22 @@ tb_dth_tot_lLik <- function(V) {
   V2<-rowSums(V)
   sum(dnorm(tb_deaths_tot,V2*1e6,tb_deaths_tot*0.05/1.96,log=T)*wts[50:70]) - adj_19a  }
 
-#' TB DEATHS AGE DISTRIBUTION 1999-2014
+#' TB DEATHS AGE DISTRIBUTION 1999-2019
 #' Motivation: dirichlet-multinomial, multinomial data with additional non-sampling biases
-#'@param V table of deaths by age 1999-2014 (row=16 years, col=11 ages)
+#'@param V simulated TB deaths by age 1999-2019 (rows = 21 years, cols = 11 age groups)
 #'@param rho correlation parameter
 #'@return likelihood
-tb_dth_age_lLik <- function(V,rho=0.01) {
-  tb_deaths_age  <- CalibDat[["tb_deaths"]][,-1]
-  adj_19b        <- sum(dDirMult(M=tb_deaths_age+.1,n=tb_deaths_age,Rho=rho)*wts[50:70])
-  V2 <- V[,-11]; V2[,10] <- V2[,10]+V[,11]
-  sum(dDirMult(M=(V*1e6),n=tb_deaths_age,Rho=rho)*wts[50:70]) - adj_19b  }
+tb_dth_age_lLik <- function(V, rho = 0.01) {
+  tb_deaths_age <- CalibDat[["tb_deaths"]][, -1]
+  year_wts <- wts[year_to_idx(1999):year_to_idx(2019)]
+
+  # The data's oldest age group is 85+, so combine the model's 85-94 and 95+
+  V_85p <- V[, -11]
+  V_85p[, 10] <- V_85p[, 10] + V[, 11]
+
+  adj <- sum(dDirMult(M = tb_deaths_age + 0.1, n = tb_deaths_age, Rho = rho) * year_wts)
+  sum(dDirMult(M = V_85p * 1e6, n = tb_deaths_age, Rho = rho) * year_wts) - adj
+}
 
 ###start demographic log likelihood
 #' TOTAL POP EACH DECADE, FOR FB
