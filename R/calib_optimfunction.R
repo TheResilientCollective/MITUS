@@ -54,14 +54,15 @@ b<-samp_i
 #'
 #' Runs nine rounds of \code{optim} on the negative log posterior, alternating
 #' BFGS and Nelder-Mead, each round starting from the previous round's result.
-#' Requires the globals set by \code{model_load}.
+#' Requires the globals set by \code{model_load}, and reads the location's
+#' calibration targets once with \code{calib_targets}.
 #'
 #' @name optim_b_st
 #' @param df starting values on the standard normal scale, as a named vector or
 #'   as a matrix with one row per starting point
 #' @param samp_i row of \code{df} to start from, also used in the saved file
 #'   names
-#' @param n_cores number of cores passed to \code{llikelihood_st}
+#' @param n_cores number of cores passed to \code{calib_llikelihood}
 #' @param loc location code: a state USPS code or a county code loaded by
 #'   \code{model_load}
 #' @param TB 1 to include the TB likelihood terms, 0 for demographic terms only
@@ -79,9 +80,10 @@ optim_b_st <- function(df,
                        TB = 1,
                        calib_end_year = NULL) {
   calib_end_year <- resolve_calib_end_year(calib_end_year)
+  targets <- calib_targets(loc)
   posterior_st <- function(theta) {
-    -lprior(theta) - llikelihood_st(theta, loc, n_cores, TB = TB,
-                                    calib_end_year = calib_end_year)
+    -lprior(theta) - calib_llikelihood(theta, loc, targets, n_cores, tb = TB == 1,
+                                       calib_end_year = calib_end_year)
   }
 
   if(min(dim(as.data.frame(df)))==1) {

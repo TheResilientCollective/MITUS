@@ -20,7 +20,7 @@ as a matrix with one row per starting point}
 \item{samp_i}{row of \code{df} to start from, also used in the saved file
 names}
 
-\item{n_cores}{number of cores passed to \code{llikelihood_st}}
+\item{n_cores}{number of cores passed to \code{calib_llikelihood}}
 
 \item{loc}{location code: a state USPS code or a county code loaded by
 \code{model_load}}
@@ -37,5 +37,6 @@ NULL, invisibly. Each round's \code{optim} result is saved to the
 \description{
 Runs nine rounds of \code{optim} on the negative log posterior, alternating
 BFGS and Nelder-Mead, each round starting from the previous round's result.
-Requires the globals set by \code{model_load}.
+Requires the globals set by \code{model_load}, and reads the location's
+calibration targets once with \code{calib_targets}.
 }
