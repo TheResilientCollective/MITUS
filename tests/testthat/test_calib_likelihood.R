@@ -2,7 +2,7 @@
 # family, and one background parameter.
 fake_setup <- function() {
   prior <- matrix(0, 3, 8)
-  prior[, 6:7] <- rbind(c(2, 3), c(2, 1), c(1, 2))
+  prior[, 6:7] <- rbind(c(2, 3), c(2, 4), c(1, 2))
   prior[, 8] <- c(0.5, 0.5, 0.5)
   list(
     P = c(a = 0, b = 0, c = 0, background = 5),
@@ -11,33 +11,39 @@ fake_setup <- function() {
     idZ0 = c(TRUE, FALSE, FALSE),
     idZ1 = c(FALSE, TRUE, FALSE),
     idZ2 = c(FALSE, FALSE, TRUE),
-    wts = setNames(rep(1, 70), 1950:2019)
+    wts = flat_wts()
   )
 }
 
 test_that("calib_params maps each prior family from the normal scale", {
   p <- calib_params(c(0, 1, -1), fake_setup())
   expect_equal(p[["a"]], stats::qbeta(0.5, 2, 3))
-  expect_equal(p[["b"]], stats::qgamma(stats::pnorm(1), shape = 2, rate = 1))
+  expect_equal(p[["b"]], stats::qgamma(stats::pnorm(1), shape = 2, rate = 4))
   expect_equal(p[["c"]], -1)
   expect_identical(p[["background"]], 5)
 })
 
-test_that("the 2020 pandemic lowers diagnosis and transmission, then restores them", {
-  months <- year_month_to_idx(2100, 12)
-  prms <- list(rDxt = matrix(2, months, 3), NixTrans = rep(1, months))
+test_that("the 2020 pandemic adjusts diagnosis, transmission and TB mortality", {
+  month <- function(year, m) year_month_to_idx(year, m)
+  prms <- list(rDxt = matrix(2, month(2100, 12), 3), NixTrans = rep(1, month(2100, 12)))
   adjusted <- apply_pandemic_2020(prms)
-  lockdown <- year_month_to_idx(2021, 6)
-  expect_equal(adjusted$rDxt[lockdown, ], rep(2 * (1 - pandemic_2020[["Dxt"]]), 3))
-  expect_equal(adjusted$NixTrans[lockdown], 1 - pandemic_2020[["Trans"]])
-  expect_equal(adjusted$rDxt[year_month_to_idx(2023, 12), ], rep(2, 3))
-  expect_identical(adjusted$rDxt[year_month_to_idx(2024, 1), ], rep(2, 3))
-  expect_identical(adjusted$rDxt[year_month_to_idx(2020, 2), ], rep(2, 3))
+  rdxt <- adjusted$rDxt[, 1]
+  trans <- adjusted$NixTrans
   rr <- adjusted$RRmuTBPand
-  expect_identical(rr[year_month_to_idx(2020, 2)], 1)
-  expect_equal(rr[lockdown], pandemic_2020[["CaseFat"]])
-  expect_equal(rr[year_month_to_idx(2023, 12)], 1)
-  expect_length(rr, months)
+  lockdown_rdxt <- 2 * (1 - 0.3707595)
+  lockdown_trans <- 1 - 0.1984619
+
+  expect_identical(c(rdxt[month(2020, 2)], trans[month(2020, 2)], rr[month(2020, 2)]), c(2, 1, 1))
+  expect_equal(c(rdxt[month(2020, 3)], rdxt[month(2021, 12)]), rep(lockdown_rdxt, 2))
+  expect_equal(c(trans[month(2020, 3)], trans[month(2021, 12)]), rep(lockdown_trans, 2))
+  expect_equal(c(rr[month(2020, 3)], rr[month(2021, 12)]), rep(1.1158255, 2))
+
+  recovery <- month(2022, 1):month(2023, 12)
+  expect_equal(rdxt[recovery], seq(lockdown_rdxt, 2, length.out = 24))
+  expect_equal(trans[recovery], seq(lockdown_trans, 1, length.out = 24))
+  expect_equal(rr[recovery], seq(1.1158255, 1, length.out = 24))
+  expect_identical(c(rdxt[month(2024, 1)], trans[month(2024, 1)], rr[month(2024, 1)]), c(2, 1, 1))
+  expect_identical(adjusted$rDxt[, 3], adjusted$rDxt[, 1])
 })
 
 test_that("a valid simulation gives the sum of its terms", {
@@ -73,98 +79,205 @@ test_that("a likelihood that cannot be evaluated gives the distance penalty", {
   )
 })
 
-test_that("calib_llikelihood takes one parameter set or a matrix of them", {
+# Run calib_llikelihood with a fake setup, scoring each parameter set by the sum
+# of its values.
+summed_llik <- function(par_matrix, n_cores = 1) {
   local_mocked_bindings(
     resolve_calib_end_year = function(calib_end_year) 2019,
     calib_setup = function() fake_setup(),
     calib_llikelihood_one = function(par, ...) sum(par)
   )
-  expect_identical(calib_llikelihood(c(a = 1, b = 2, c = 3), "CA", list()), 6)
-  expect_identical(calib_llikelihood(rbind(c(1, 2, 3), c(4, 5, 6)), "CA", list()), c(6, 15))
+  calib_llikelihood(par_matrix, "CA", list(), n_cores = n_cores)
+}
+
+test_that("calib_llikelihood takes one parameter set in any shape, or a matrix of them", {
+  expect_identical(summed_llik(c(a = 1, b = 2, c = 3)), 6)
+  expect_identical(summed_llik(matrix(c(1, 2, 3), ncol = 1)), 6)
+  expect_identical(summed_llik(data.frame(a = 1, b = 2, c = 3)), 6)
+  expect_identical(summed_llik(rbind(c(1, 2, 3), c(4, 5, 6))), c(6, 15))
+})
+
+test_that("calib_llikelihood needs one value per calibrated parameter", {
+  expect_error(summed_llik(c(1, 2)), "Each parameter set needs 3 values, not 2")
+})
+
+test_that("a parameter set that fails in parallel stops the calibration", {
+  local_mocked_bindings(
+    resolve_calib_end_year = function(calib_end_year) 2019,
+    calib_setup = function() fake_setup(),
+    calib_llikelihood_one = function(par, ...) if (par[1] > 1) stop("worker failed") else sum(par)
+  )
+  expect_error(
+    suppressWarnings(
+      calib_llikelihood(rbind(c(1, 2, 3), c(4, 5, 6)), "CA", list(), n_cores = 2)
+    ),
+    "failed for parameter set 2.*worker failed"
+  )
+})
+
+test_that("calib_llikelihood passes the TB switch and end year to every set", {
+  seen <- new.env()
+  local_mocked_bindings(
+    resolve_calib_end_year = function(calib_end_year) calib_end_year,
+    calib_setup = function() fake_setup(),
+    calib_llik_terms = function(p, loc, targets, wts, tb, calib_end_year) {
+      seen$tb <- tb
+      seen$calib_end_year <- calib_end_year
+      c(a = 1)
+    }
+  )
+  calib_llikelihood(c(0, 0, 0), "CA", list(), tb = FALSE, calib_end_year = 2021)
+  expect_identical(seen$tb, FALSE)
+  expect_identical(seen$calib_end_year, 2021)
+})
+
+test_that("calib_llik_terms keeps only the demographic terms without TB", {
+  local_globals(list(wts = flat_wts()))
+  seen <- new.env()
+  local_mocked_bindings(
+    simulate_calibration = function(p, loc, calib_end_year) {
+      seen$calib_end_year <- calib_end_year
+      list(out = fake_outputs(), prms = fake_progression())
+    }
+  )
+  terms <- calib_llik_terms(c(rSlfCur = 0.01, muIp = 0.02), "CA", ca_targets(), flat_wts(),
+                            tb = FALSE, calib_end_year = 2021)
+  expect_named(terms, c("pop_nusb", "pop_usb", "pop_age", "homeless_pop", "deaths_total",
+                        "deaths_age", "mort_dist"))
+  expect_identical(seen$calib_end_year, 2021L)
+})
+
+test_that("weights ending before 2019 are an error", {
+  expect_error(check_weight_years(flat_wts()[as.character(1950:2018)]),
+               "importance weights end in 2018")
+  expect_silent(check_weight_years(flat_wts()))
 })
 
 test_that("calib_setup reads the globals model_load sets, and needs all of them", {
-  g <- globalenv()
   setup <- fake_setup()
-  saved <- mget(names(setup), envir = g, ifnotfound = list(NULL))
-  withr::defer({
-    for (name in names(saved)) {
-      if (is.null(saved[[name]])) {
-        rm(list = intersect(name, ls(g)), envir = g)
-      } else {
-        assign(name, saved[[name]], envir = g)
-      }
-    }
-  })
-  list2env(setup, envir = g)
+  local_globals(setup)
   expect_identical(calib_setup(), setup)
-  rm("idZ2", envir = g)
+  rm("idZ2", envir = globalenv())
   expect_error(calib_setup(), "Run model_load\\(\\) before calibrating; missing idZ2$")
 })
 
-# Annual outputs with every simulated quantity, filled with positive values.
-fake_outputs <- function() {
-  set.seed(3)
-  names <- func_ResNam()
-  matrix(stats::runif(70 * length(names), 1, 2) * 1e-3, 70, length(names),
-         dimnames = list(NULL, names))
+# Simulation run from cSim with every annual output set to 1, after applying
+# `change` to the outputs matrix.
+local_simulation <- function(change = identity, v1 = 1, env = parent.frame()) {
+  outputs <- func_ResNam()
+  local_mocked_bindings(
+    param_init = function(...) list(RRmuHR = c(1, 1), ResNam = outputs),
+    def_prgchng = function(...) NULL,
+    def_ttt = function(...) NULL,
+    apply_pandemic_2020 = function(prms) prms,
+    reblncd = function(...) matrix(0),
+    cSim = function(...) {
+      list(Outputs = change(matrix(1, 70, length(outputs))), V1 = array(v1, c(2, 2)))
+    },
+    .env = env
+  )
 }
 
-fake_prms <- list(
-  Mpfast = matrix(0.1, 4, 4),
-  Mrslow = matrix(0.0002, 4, 4),
-  rfast = 0.1,
-  rRecov = 0.002
+test_that("a simulation with negative or missing 2017 outputs or state is invalid", {
+  set_2017 <- function(value) function(out) replace(out, cbind(year_to_idx(2017), 5), value)
+  local_simulation(set_2017(-1))
+  expect_null(suppressMessages(simulate_calibration(1, "CA", 2019)))
+  local_simulation(set_2017(NA))
+  expect_null(suppressMessages(simulate_calibration(1, "CA", 2019)))
+  local_simulation(v1 = -1)
+  expect_null(suppressMessages(simulate_calibration(1, "CA", 2019)))
+})
+
+test_that("a valid simulation returns named outputs, and only 2017 is checked", {
+  local_simulation(function(out) replace(out, cbind(year_to_idx(2016), 5), -1))
+  sim <- simulate_calibration(1, "CA", 2019)
+  expect_identical(colnames(sim$out), func_ResNam())
+  expect_identical(unname(sim$out[year_to_idx(2016), 5]), -1)
+})
+
+tb_terms <- function(loc, out = fake_outputs()) {
+  tb_llik_terms(out, fake_progression(), c(rSlfCur = 0.01, muIp = 0.02), loc, ca_targets(),
+                flat_wts())
+}
+
+all_tb_terms <- c(
+  "cases_total", "cases_decline", "cases_age_usb", "cases_age_nusb", "cases_nusb", "cases_usb",
+  "cases_nativity_trend", "cases_homeless", "recent_transmission", "cases_recent_entry",
+  "tx_outcomes", "ltbi_tx_total", "ltbi_tx_dist", "ltbi_prev_usb", "ltbi_prev_nusb",
+  "tb_deaths_total", "tb_deaths_age", "borgdorff", "ferebee", "sutherland", "tiemersma"
 )
 
-tb_terms <- function(loc, out, targets) {
-  suppressWarnings(tb_llik_terms(
-    out, fake_prms, c(rSlfCur = 0.01, muIp = 0.02), loc, targets, setNames(rep(1, 70), 1950:2019)
-  ))
-}
+test_that("TB terms are all present and finite for a typical state", {
+  terms <- tb_terms("CA")
+  expect_named(terms, all_tb_terms)
+  expect_true(all(is.finite(terms)))
+})
 
-test_that("TB terms leave out the targets some states drop", {
-  targets <- suppressWarnings(calib_targets("CA"))
+test_that("TB terms leave out the targets each listed state drops", {
+  expect_named(tb_terms("MT"), setdiff(all_tb_terms, "cases_nativity_trend"))
+  for (loc in c("RI", "ID", "NH", "VT", "WY")) {
+    expect_named(tb_terms(loc), setdiff(all_tb_terms, "cases_homeless"), info = loc)
+  }
+})
+
+test_that("each TB term gets the simulated values it compares", {
   out <- fake_outputs()
-  all_terms <- c(
-    "cases_total", "cases_decline", "cases_age_usb", "cases_age_nusb", "cases_nusb", "cases_usb",
-    "cases_nat_trend", "cases_homeless", "recent_transmission", "cases_recent_entry",
-    "tx_outcomes", "ltbi_tx_total", "ltbi_tx_dist", "ltbi_prev_usb", "ltbi_prev_nusb",
-    "tb_deaths_total", "tb_deaths_age", "borgdorff", "ferebee", "sutherland", "tiemersma"
+  targets <- ca_targets()
+  terms <- tb_terms("CA", out)
+  nusb_age <- by_age(out, "NOTIF_") + by_age(out, "NOTIF_MORT_") -
+    (by_age(out, "NOTIF_US_") + by_age(out, "NOTIF_US_MORT_"))
+  expect_identical(terms[["cases_age_nusb"]], llik_cases_age_5yr(nusb_age, 0, targets, flat_wts()))
+  rows <- year_to_idx(2015:2018)
+  fraction <- sum(out[rows, c("INCID_REC_US", "INCID_REC_FB")]) /
+    sum(out[rows, c("INCID_ALL_US", "INCID_ALL_FB")])
+  expect_identical(terms[["recent_transmission"]], llik_recent_transmission(fraction, targets))
+  y2011 <- year_to_idx(2011)
+  expect_identical(
+    terms[["ltbi_prev_usb"]],
+    llik_ltbi_prev_usb(by_age(out, "N_US_LTBI_")[y2011, ], by_age(out, "N_US_")[y2011, ], targets)
   )
-  expect_named(tb_terms("CA", out, targets), all_terms)
-  expect_named(tb_terms("MT", out, targets), setdiff(all_terms, "cases_nat_trend"))
-  expect_named(tb_terms("VT", out, targets), setdiff(all_terms, "cases_homeless"))
+  expect_identical(terms[["tiemersma"]], llik_tiemersma(self_cure = 0.01, mortality = 0.02))
 })
 
 test_that("North Dakota's US-born case trend target is fixed", {
-  targets <- suppressWarnings(calib_targets("CA"))
   out <- fake_outputs()
-  nusb <- out[, "NOTIF_F1"] + out[, "NOTIF_F2"] + (out[, "NOTIF_MORT_F1"] + out[, "NOTIF_MORT_F2"])
   usb <- out[, "NOTIF_US"] + out[, "NOTIF_MORT_US"]
+  nusb <- out[, "NOTIF_F1"] + out[, "NOTIF_F2"] + (out[, "NOTIF_MORT_F1"] + out[, "NOTIF_MORT_F2"])
   expect_identical(
-    tb_terms("ND", out, targets)[["cases_nat_trend"]],
-    llik_cases_nat_trend(nusb, usb, targets, usb_trend = -0.1)
+    tb_terms("ND", out)[["cases_nativity_trend"]],
+    llik_cases_nativity_trend(usb, nusb, ca_targets(), usb_trend = -0.1)
   )
   expect_identical(
-    tb_terms("CA", out, targets)[["cases_nat_trend"]],
-    llik_cases_nat_trend(nusb, usb, targets)
+    tb_terms("CA", out)[["cases_nativity_trend"]],
+    llik_cases_nativity_trend(usb, nusb, ca_targets())
   )
 })
 
 test_that("demographic terms are named and finite", {
-  targets <- suppressWarnings(calib_targets("CA"))
-  terms <- demographic_llik_terms(fake_outputs(), targets, setNames(rep(1, 70), 1950:2019))
+  terms <- demographic_llik_terms(fake_outputs(), ca_targets(), flat_wts())
   expect_named(terms, c("pop_nusb", "pop_usb", "pop_age", "homeless_pop", "deaths_total",
                         "deaths_age", "mort_dist"))
   expect_true(all(is.finite(terms)))
 })
 
+test_that("the homeless population term compares the 2010 population", {
+  out <- fake_outputs()
+  targets <- ca_targets()
+  expect_identical(
+    demographic_llik_terms(out, targets, flat_wts())[["homeless_pop"]],
+    llik_homeless_pop(out[year_to_idx(2010), "N_HR"], targets)
+  )
+})
+
+# The expected values are what the state likelihood llikelihood_st, which this
+# code replaces, gives for the same parameters.
 test_that("California's calibrated parameters give the state likelihood", {
   skip_on_cran()
-  suppressWarnings(model_load("CA"))
+  local_model_load("CA")
   optim <- readRDS(system.file("CA", "CA_Optim_all_15_0708.rds", package = "MITUS"))
   par <- optim[which.min(optim[, ncol(optim)]), seq_len(nrow(calib_setup()$ParamInitZ))]
-  targets <- suppressWarnings(calib_targets("CA"))
+  targets <- ca_targets()
   expect_equal(calib_llikelihood(par, "CA", targets), -352.4801406337, tolerance = 1e-10)
+  expect_equal(calib_llikelihood(par, "CA", targets, tb = FALSE), -18.8659781051,
+               tolerance = 1e-10)
 })
