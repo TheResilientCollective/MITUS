@@ -194,19 +194,18 @@ llik_cases_nativity_trend <- function(f_usb, f_nusb, usb_trend = NA) {
 #' Age distribution of cases in one nativity group, in 5-year buckets
 #'
 #' Dirichlet-multinomial. Age groups with suppressed counts are pooled into one
-#' group holding the bucket's remaining cases, taken from the bucket's cases by
-#' nativity.
+#' group holding the rest of the bucket's total cases.
 #'
-#' @param f fit rows of cases by age for one nativity group
-#' @param f_totals fit rows of cases by nativity for the same group
+#' @param f fit rows of cases by age for one nativity group, with each bucket's
+#'   total cases as \code{total}
 #' @param rho correlation parameter
 #' @noRd
-llik_cases_age_5yr <- function(f, f_totals, wts, rho = 0.1) {
+llik_cases_age_5yr <- function(f, wts, rho = 0.1) {
   observed <- obs_by_group(f, data_age_groups, "observed")
   periods <- observed$periods
   obs <- observed$values
   sim <- obs_by_group(f, data_age_groups, "simulated")$values
-  totals <- f_totals$observed[match(periods$start, f_totals$start)]
+  totals <- f$total[match(periods$start, f$start)]
   w <- period_wts(wts, periods$start, periods$end)
   terms <- vapply(seq_len(nrow(obs)), function(i) {
     o <- obs[i, ]
@@ -420,13 +419,13 @@ llik_borgdorff <- function(f) {
 #' Binomial on each year's cases among those still TB-free, divided by 4.
 #'
 #' @param f fit rows of the target, with each year's cases as \code{observed},
-#'   the people at risk as \code{total}, and the simulated rate as
+#'   the people at risk as \code{total}, and the expected cases as
 #'   \code{simulated}
 #' @noRd
 llik_cohort <- function(f) {
   cases <- f$observed
   at_risk <- f$total
-  rate <- f$simulated
+  rate <- f$simulated / at_risk
   # Years with no cases have no reference rate, so count 0.01 cases there
   fit_cases <- replace(cases, cases == 0, 0.01)
   adj <- sum(

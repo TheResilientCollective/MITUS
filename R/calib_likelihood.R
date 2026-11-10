@@ -106,12 +106,47 @@ calib_llikelihood_one <- function(par, loc, targets, setup, tb, calib_end_year) 
 calib_llik_terms <- function(p, loc, targets, wts, tb = TRUE, calib_end_year = NULL) {
   check_weight_years(wts)
   check_target_horizon(targets, wts)
-  calib_end_year <- resolve_calib_end_year(calib_end_year)
+  fit <- simulate_fit(p, loc, targets, resolve_calib_end_year(calib_end_year))
+  if (is.null(fit)) {
+    return(NULL)
+  }
+  fit_llik_terms(fit, loc, targets, wts, tb)
+}
+
+#' Calibration fit of a parameter set
+#'
+#' Simulates the location with a parameter set and pairs each calibration
+#' target observation with the simulated value it is compared with. Needs the
+#' globals \code{model_load} sets for the location.
+#'
+#' @param par parameter set on the standard normal scale of the calibration
+#' @inheritParams calib_llikelihood
+#' @return fit table with one row per observation and columns target, start,
+#'   end, nativity, group, observed, simulated and total; see
+#'   \code{plot_calib_fit}
+#' @export
+calib_fit_for <- function(par, loc, targets, calib_end_year = NULL) {
+  setup <- calib_setup()
+  check_target_horizon(targets, setup$wts)
+  fit <- simulate_fit(calib_params(par, setup), loc, targets,
+                      resolve_calib_end_year(calib_end_year))
+  if (is.null(fit)) {
+    stop("The parameter set gives an invalid simulation", call. = FALSE)
+  }
+  fit
+}
+
+#' Simulate a location and build its fit table, or NULL when the simulation is
+#' invalid
+#'
+#' @param p model parameter vector, from \code{calib_params}
+#' @noRd
+simulate_fit <- function(p, loc, targets, calib_end_year) {
   sim <- simulate_calibration(p, loc, calib_end_year)
   if (is.null(sim)) {
     return(NULL)
   }
-  fit_llik_terms(calib_fit(sim$out, sim$prms, p, targets), loc, targets, wts, tb)
+  calib_fit(sim$out, sim$prms, p, targets)
 }
 
 #' Stop unless the importance weights reach the simulation's validity check year
@@ -347,10 +382,8 @@ fit_llik_terms <- function(fit, loc, targets, wts, tb = TRUE) {
   terms <- c(
     cases_total = llik_cases_total(rows("cases_total"), wts),
     cases_decline = llik_cases_decline(rows("cases_decline"), wts),
-    cases_age_usb = llik_cases_age_5yr(rows("cases_age", "usb"), rows("cases_nativity", "usb"),
-                                       wts),
-    cases_age_nusb = llik_cases_age_5yr(rows("cases_age", "nusb"),
-                                        rows("cases_nativity", "nusb"), wts),
+    cases_age_usb = llik_cases_age_5yr(rows("cases_age", "usb"), wts),
+    cases_age_nusb = llik_cases_age_5yr(rows("cases_age", "nusb"), wts),
     cases_nusb = llik_cases_nativity_5yr(rows("cases_nativity", "nusb"), wts),
     cases_usb = llik_cases_nativity_5yr(rows("cases_nativity", "usb"), wts)
   )

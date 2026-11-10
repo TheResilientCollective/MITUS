@@ -150,6 +150,36 @@ test_that("calib_llik_terms keeps only the demographic terms without TB", {
   expect_identical(seen$calib_end_year, 2021L)
 })
 
+test_that("calib_fit_for returns the fit of a parameter set's simulation", {
+  local_mocked_bindings(
+    calib_setup = function() list(wts = flat_wts()),
+    calib_params = function(par, setup) c(rSlfCur = 0.01, muIp = 0.02),
+    simulate_calibration = function(p, loc, calib_end_year) {
+      list(out = fake_outputs(), prms = fake_progression())
+    }
+  )
+  fit <- calib_fit_for(0, "CA", ca_targets(), calib_end_year = 2019)
+  expected <- calib_fit(fake_outputs(), fake_progression(), c(rSlfCur = 0.01, muIp = 0.02),
+                        ca_targets())
+  expect_identical(fit, expected)
+})
+
+test_that("calib_fit_for checks the targets end within the weighted years", {
+  local_mocked_bindings(calib_setup = function() list(wts = flat_wts()))
+  targets <- ca_targets()
+  targets$obs$end[targets$obs$target == "cases_homeless"] <- 2024L
+  expect_error(calib_fit_for(0, "CA", targets), "run past the last weighted year")
+})
+
+test_that("calib_fit_for stops when the simulation is invalid", {
+  local_mocked_bindings(
+    calib_setup = function() list(wts = flat_wts()),
+    calib_params = function(par, setup) c(rSlfCur = 0.01, muIp = 0.02),
+    simulate_calibration = function(p, loc, calib_end_year) NULL
+  )
+  expect_error(calib_fit_for(0, "CA", ca_targets(), calib_end_year = 2019), "invalid simulation")
+})
+
 test_that("weights ending before the validity check year are an error", {
   expect_error(check_weight_years(flat_wts()[as.character(1950:2016)]),
                "checks each simulation's 2017 outputs, but the importance weights end in 2016")
@@ -244,10 +274,8 @@ test_that("each case term reads the rows of its own target and nativity group", 
                    llik_cases_nativity_5yr(rows("cases_nativity", "usb"), flat_wts()))
   expect_identical(terms[["cases_nusb"]],
                    llik_cases_nativity_5yr(rows("cases_nativity", "nusb"), flat_wts()))
-  expect_identical(
-    terms[["cases_age_usb"]],
-    llik_cases_age_5yr(rows("cases_age", "usb"), rows("cases_nativity", "usb"), flat_wts())
-  )
+  expect_identical(terms[["cases_age_usb"]],
+                   llik_cases_age_5yr(rows("cases_age", "usb"), flat_wts()))
   expect_identical(terms[["ltbi_prev_nusb"]], llik_ltbi_prev(rows("ltbi_prev", "nusb")))
 })
 
@@ -275,5 +303,8 @@ test_that("California's calibrated parameters give the recorded likelihood", {
   targets <- ca_targets()
   expect_equal(calib_llikelihood(par, "CA", targets), -351.6161192892, tolerance = 1e-10)
   expect_equal(calib_llikelihood(par, "CA", targets, tb = FALSE), -18.8659781051,
+               tolerance = 1e-10)
+  fit <- calib_fit_for(par, "CA", targets)
+  expect_equal(sum(fit_llik_terms(fit, "CA", targets, calib_setup()$wts)), -351.6161192892,
                tolerance = 1e-10)
 })

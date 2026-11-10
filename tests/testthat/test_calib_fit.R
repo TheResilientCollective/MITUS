@@ -58,6 +58,8 @@ test_that("case targets get the simulated cases they compare", {
   first <- age[1, ]
   expect_equal(first$simulated,
                sum(by_data_age(nusb_age)[year_to_idx(first$start:first$end), first$group]) * 1e6)
+  nativity <- rows_of(fit, "cases_nativity", "nusb")
+  expect_identical(age$total, nativity$observed[match(age$start, nativity$start)])
 })
 
 test_that("single-year and fixed-window targets take their years from the targets", {
@@ -119,6 +121,8 @@ test_that("published studies compare the simulated progression with each study",
   f <- cohort_fit("ferebee", fake_progression(), cohort)
   expect_identical(f$total, c(1000, 900))
   expect_identical(f$observed, c(20, 0))
+  p_free <- tb_free_probability(fake_progression(), 0:2)
+  expect_equal(f$simulated, -log(p_free[2:3] / p_free[1:2]) * c(1000, 900))
 })
 
 test_that("Tiemersma compares the simulated duration and fatality with 3 years and 0.9", {

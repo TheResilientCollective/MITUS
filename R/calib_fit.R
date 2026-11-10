@@ -3,12 +3,14 @@
 # terms are computed from this table, and the fit plots draw it.
 #
 # The fit table has one row per observation, with columns target, start, end,
-# nativity, group, observed, simulated and total. Simulated values are on the
-# scale each likelihood term compares: counts of people for counts, fractions
-# for fractions, and the model's own scale for distributions, of which only
-# the proportions are compared. Published studies, the Tiemersma estimates and
-# the mortality risk distribution are not tied to calendar years; their start
-# and end are NA, and group names the time or quantity.
+# nativity, group, observed, simulated and total. Observed and simulated values
+# are on one scale: counts of people for counts and fractions for fractions.
+# Distributions are the exception: their simulated values are on the model's
+# own scale, and only the proportions within each period are compared. total
+# is the observed total an observation is part of: the people tested, the
+# people at risk, or a bucket's cases where age groups are suppressed.
+# Published studies and the Tiemersma estimates are not tied to calendar years;
+# their start and end are NA, and group names the time or quantity.
 
 #' Fit rows from observation rows and their simulated values
 #' @noRd
@@ -105,16 +107,32 @@ case_fit <- function(out, targets) {
   cases_usb <- out[, "NOTIF_US"] + out[, "NOTIF_MORT_US"]
   cases_nusb <- out[, "NOTIF_F1"] + out[, "NOTIF_F2"] +
     (out[, "NOTIF_MORT_F1"] + out[, "NOTIF_MORT_F2"])
+  nativity_usb <- period_fit(targets, "cases_nativity", cases_usb, "usb")
+  nativity_nusb <- period_fit(targets, "cases_nativity", cases_nusb, "nusb")
   rbind(
     period_fit(targets, "cases_total", cases),
     period_fit(targets, "cases_decline", cases),
-    period_fit(targets, "cases_nativity", cases_usb, "usb"),
-    period_fit(targets, "cases_nativity", cases_nusb, "nusb"),
-    group_fit(targets, "cases_age", by_data_age(cases_usb_age), "usb", scale = 1e6),
-    group_fit(targets, "cases_age", by_data_age(cases_nusb_age), "nusb", scale = 1e6),
+    nativity_usb,
+    nativity_nusb,
+    with_bucket_totals(
+      group_fit(targets, "cases_age", by_data_age(cases_usb_age), "usb", scale = 1e6),
+      nativity_usb
+    ),
+    with_bucket_totals(
+      group_fit(targets, "cases_age", by_data_age(cases_nusb_age), "nusb", scale = 1e6),
+      nativity_nusb
+    ),
     period_fit(targets, "cases_homeless", out[, "NOTIF_HR"] + out[, "NOTIF_MORT_HR"]),
     period_fit(targets, "cases_recent_entry", out[, "NOTIF_F1"] + out[, "NOTIF_MORT_F1"])
   )
+}
+
+#' Fit rows with each bucket's observed total from another target's fit rows
+#' for the same buckets
+#' @noRd
+with_bucket_totals <- function(f, totals) {
+  f$total <- totals$observed[match(f$start, totals$start)]
+  f
 }
 
 #' Fit rows of the TB targets other than cases
@@ -218,8 +236,8 @@ borgdorff_fit <- function(progression, d) {
 }
 
 #' Fit rows of a published cohort's annual TB incidence after infection: each
-#' year's cases and people at risk, against the simulated rate, NaN when the
-#' rates cannot be computed
+#' year's cases and people at risk, against the cases expected at the
+#' simulated rate, NaN when the rates cannot be computed
 #' @noRd
 cohort_fit <- function(target, progression, d) {
   n_years <- nrow(d)
@@ -228,7 +246,8 @@ cohort_fit <- function(target, progression, d) {
     stopifnot(length(p_free) == n_years + 1)
     -log(1 - diff(-p_free) / p_free[-(n_years + 1)])
   }, error = function(e) rep(NaN, n_years))
-  fixed_fit_rows(target, as.character(d[, 1]), d[, 3], simulated, total = d[, "At_Risk"])
+  fixed_fit_rows(target, as.character(d[, 1]), d[, 3], simulated * d[, "At_Risk"],
+                 total = d[, "At_Risk"])
 }
 
 #' Fit rows of Tiemersma's duration of untreated TB and its case fatality

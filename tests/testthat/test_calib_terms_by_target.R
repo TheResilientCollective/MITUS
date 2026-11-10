@@ -113,24 +113,22 @@ test_that("a fixed US-born trend replaces only the US-born target", {
                normal_diff(-0.1, log(0.9), 0.005))
 })
 
-# Fit rows of cases by age for one nativity group, with the group's bucket totals.
+# Fit rows of cases by age for one nativity group, with each bucket's total.
 age_fit <- function(shown, simulated, totals = rowSums(shown)) {
   n_ages <- length(data_age_groups)
-  list(
-    age = fit_of("cases_age", as.vector(t(shown)), as.vector(t(simulated)),
-                 rep(bucket_starts, each = n_ages), rep(bucket_starts + 4L, each = n_ages),
-                 nativity = "usb", group = rep(data_age_groups, length(bucket_starts))),
-    totals = bucket_fit("cases_nativity", totals, totals, nativity = "usb")
-  )
+  fit_of("cases_age", as.vector(t(shown)), as.vector(t(simulated)),
+         rep(bucket_starts, each = n_ages), rep(bucket_starts + 4L, each = n_ages),
+         nativity = "usb", group = rep(data_age_groups, length(bucket_starts)),
+         total = rep(totals, each = n_ages))
 }
 
 test_that("the case age distribution is zero when the simulation matches", {
   set.seed(1)
   counts <- matrix(sample(20:200, 50, replace = TRUE), 5, 10)
   f <- age_fit(counts, counts + 0.01)
-  expect_equal(llik_cases_age_5yr(f$age, f$totals, flat_wts()), 0, tolerance = 1e-10)
+  expect_equal(llik_cases_age_5yr(f, flat_wts()), 0, tolerance = 1e-10)
   f <- age_fit(counts, counts[, 10:1] + 0.01)
-  expect_lt(llik_cases_age_5yr(f$age, f$totals, flat_wts()), -1)
+  expect_lt(llik_cases_age_5yr(f, flat_wts()), -1)
 })
 
 test_that("the case age distribution uses rho 0.1 and each bucket's mean weight", {
@@ -141,7 +139,7 @@ test_that("the case age distribution uses rho 0.1 and each bucket's mean weight"
   expected <- sum(vapply(1:5, function(b) {
     llik_dirmult(counts[b, ], reversed[b, ], rho = 0.1, w = b, pad = 0.01)
   }, numeric(1)))
-  expect_equal(llik_cases_age_5yr(f$age, f$totals, bucket_mean_wts(bucket_starts)), expected)
+  expect_equal(llik_cases_age_5yr(f, bucket_mean_wts(bucket_starts)), expected)
 })
 
 test_that("suppressed age groups are pooled into the bucket's remaining cases", {
@@ -154,13 +152,13 @@ test_that("suppressed age groups are pooled into the bucket's remaining cases", 
   sim <- counts + 0.01
   sim[2, c(3, 7)] <- c(sum(counts[2, c(3, 7)]) + 0.01, 0)
   f <- age_fit(shown, sim, totals = rowSums(counts))
-  matched <- llik_cases_age_5yr(f$age, f$totals, flat_wts())
+  matched <- llik_cases_age_5yr(f, flat_wts())
   expect_equal(matched, 0, tolerance = 1e-10)
 
   # How the pooled cases split among the suppressed groups does not matter
   sim[2, c(3, 7)] <- c(0, sum(counts[2, c(3, 7)]) + 0.01)
   f <- age_fit(shown, sim, totals = rowSums(counts))
-  expect_equal(llik_cases_age_5yr(f$age, f$totals, flat_wts()), matched)
+  expect_equal(llik_cases_age_5yr(f, flat_wts()), matched)
 })
 
 test_that("homeless and recent-arrival buckets carry the mean weight of their years", {
@@ -279,7 +277,7 @@ test_that("cohort studies are binomial on each year's cases, divided by 4", {
   fit <- c(20, 0.01)
   adj <- sum(fit * log(fit / at_risk) + (at_risk - fit) * log(1 - fit / at_risk))
   lik <- sum(cases * log(rate) + (at_risk - cases) * log(1 - rate))
-  f <- fit_of("ferebee", cases, rate, group = c("1", "2"), total = at_risk)
+  f <- fit_of("ferebee", cases, rate * at_risk, group = c("1", "2"), total = at_risk)
   expect_equal(llik_cohort(f), lik / 4 - adj / 4)
 })
 
