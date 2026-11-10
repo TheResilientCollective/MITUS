@@ -198,9 +198,12 @@ test_that("a valid simulation returns named outputs, and only 2017 is checked", 
   expect_identical(unname(sim$out[year_to_idx(2016), 5]), -1)
 })
 
-tb_terms <- function(loc, out = fake_outputs(), targets = ca_targets()) {
-  tb_llik_terms(out, fake_progression(), c(rSlfCur = 0.01, muIp = 0.02), loc, targets,
-                flat_wts())
+# Log-likelihood terms of a fake simulation for a location, with California's
+# targets.
+terms_for <- function(loc, tb = TRUE, out = fake_outputs()) {
+  targets <- ca_targets()
+  fit <- calib_fit(out, fake_progression(), c(rSlfCur = 0.01, muIp = 0.02), targets)
+  fit_llik_terms(fit, loc, targets, flat_wts(), tb)
 }
 
 all_tb_terms <- c(
@@ -209,97 +212,55 @@ all_tb_terms <- c(
   "tx_outcomes", "ltbi_tx_total", "ltbi_tx_dist", "ltbi_prev_usb", "ltbi_prev_nusb",
   "tb_deaths_total", "tb_deaths_age", "borgdorff", "ferebee", "sutherland", "tiemersma"
 )
+demographic_terms <- c("pop_nusb", "pop_usb", "pop_age", "homeless_pop", "deaths_total",
+                       "deaths_age", "mort_dist")
 
-test_that("TB terms are all present and finite for a typical state", {
-  terms <- tb_terms("CA")
-  expect_named(terms, all_tb_terms)
+test_that("all terms are present and finite for a typical state", {
+  terms <- terms_for("CA")
+  expect_named(terms, c(all_tb_terms, demographic_terms))
   expect_true(all(is.finite(terms)))
 })
 
-test_that("TB terms leave out the targets each listed state drops", {
-  expect_named(tb_terms("MT"), setdiff(all_tb_terms, "cases_nativity_trend"))
+test_that("without TB, only the demographic terms remain", {
+  expect_named(terms_for("CA", tb = FALSE), demographic_terms)
+  expect_identical(terms_for("CA", tb = FALSE), terms_for("CA")[demographic_terms])
+})
+
+test_that("the terms leave out the targets each listed state drops", {
+  expect_named(terms_for("MT"), c(setdiff(all_tb_terms, "cases_nativity_trend"),
+                                  demographic_terms))
   for (loc in c("RI", "ID", "NH", "VT", "WY")) {
-    expect_named(tb_terms(loc), setdiff(all_tb_terms, "cases_homeless"), info = loc)
+    expect_named(terms_for(loc), c(setdiff(all_tb_terms, "cases_homeless"), demographic_terms),
+                 info = loc)
   }
 })
 
-test_that("each TB term gets the simulated values it compares", {
-  out <- fake_outputs()
+test_that("each case term reads the rows of its own target and nativity group", {
   targets <- ca_targets()
-  terms <- tb_terms("CA", out)
-  nusb_age <- by_age(out, "NOTIF_") + by_age(out, "NOTIF_MORT_") -
-    (by_age(out, "NOTIF_US_") + by_age(out, "NOTIF_US_MORT_"))
+  fit <- calib_fit(fake_outputs(), fake_progression(), c(rSlfCur = 0.01, muIp = 0.02), targets)
+  rows <- function(target, nativity) fit[fit$target == target & fit$nativity == nativity, ]
+  terms <- terms_for("CA")
+  expect_identical(terms[["cases_usb"]],
+                   llik_cases_nativity_5yr(rows("cases_nativity", "usb"), flat_wts()))
+  expect_identical(terms[["cases_nusb"]],
+                   llik_cases_nativity_5yr(rows("cases_nativity", "nusb"), flat_wts()))
   expect_identical(
-    terms[["cases_age_nusb"]], llik_cases_age_5yr(nusb_age, "nusb", targets, flat_wts())
+    terms[["cases_age_usb"]],
+    llik_cases_age_5yr(rows("cases_age", "usb"), rows("cases_nativity", "usb"), flat_wts())
   )
-  rows <- year_to_idx(2015:2018)
-  fraction <- sum(out[rows, c("INCID_REC_US", "INCID_REC_FB")]) /
-    sum(out[rows, c("INCID_ALL_US", "INCID_ALL_FB")])
-  expect_identical(terms[["recent_transmission"]], llik_recent_transmission(fraction, targets))
-  y2011 <- year_to_idx(2011)
-  expect_identical(
-    terms[["ltbi_prev_usb"]],
-    llik_ltbi_prev_usb(by_age(out, "N_US_LTBI_")[y2011, ], by_age(out, "N_US_")[y2011, ], targets)
-  )
-  expect_identical(terms[["tiemersma"]], llik_tiemersma(self_cure = 0.01, mortality = 0.02))
-})
-
-test_that("single-year and fixed-window targets take their years from the targets", {
-  out <- fake_outputs()
-  targets <- ca_targets()
-  moved <- targets
-  est <- moved$estimates
-  est[est$target == "recent_transmission", c("start", "end")] <- c(2012L, 2016L)
-  est[est$target %in% c("ltbi_tx_total", "ltbi_tx_share"), c("start", "end")] <- 2005L
-  est[est$target == "homeless_pop", c("start", "end")] <- 2013L
-  moved$estimates <- est
-  moved$obs[moved$obs$target == "ltbi_prev", c("start", "end")] <- 2014L
-  terms <- tb_terms("CA", out, moved)
-  rows <- year_to_idx(2012:2016)
-  fraction <- sum(out[rows, c("INCID_REC_US", "INCID_REC_FB")]) /
-    sum(out[rows, c("INCID_ALL_US", "INCID_ALL_FB")])
-  expect_identical(terms[["recent_transmission"]], llik_recent_transmission(fraction, moved))
-  y2005 <- year_to_idx(2005)
-  expect_identical(terms[["ltbi_tx_total"]], llik_ltbi_tx_total(out[y2005, "TLTBI_INITS"], moved))
-  y2014 <- year_to_idx(2014)
-  expect_identical(
-    terms[["ltbi_prev_nusb"]],
-    llik_ltbi_prev_nusb(by_age(out, "N_FB_LTBI_")[y2014, ], by_age(out, "N_FB_")[y2014, ], moved)
-  )
-  expect_identical(
-    demographic_llik_terms(out, moved, flat_wts())[["homeless_pop"]],
-    llik_homeless_pop(out[year_to_idx(2013), "N_HR"], moved)
-  )
+  expect_identical(terms[["ltbi_prev_nusb"]], llik_ltbi_prev(rows("ltbi_prev", "nusb")))
 })
 
 test_that("North Dakota's US-born case trend target is fixed", {
-  out <- fake_outputs()
-  usb <- out[, "NOTIF_US"] + out[, "NOTIF_MORT_US"]
-  nusb <- out[, "NOTIF_F1"] + out[, "NOTIF_F2"] + (out[, "NOTIF_MORT_F1"] + out[, "NOTIF_MORT_F2"])
-  expect_identical(
-    tb_terms("ND", out)[["cases_nativity_trend"]],
-    llik_cases_nativity_trend(usb, nusb, ca_targets(), usb_trend = -0.1)
-  )
-  expect_identical(
-    tb_terms("CA", out)[["cases_nativity_trend"]],
-    llik_cases_nativity_trend(usb, nusb, ca_targets())
-  )
-})
-
-test_that("demographic terms are named and finite", {
-  terms <- demographic_llik_terms(fake_outputs(), ca_targets(), flat_wts())
-  expect_named(terms, c("pop_nusb", "pop_usb", "pop_age", "homeless_pop", "deaths_total",
-                        "deaths_age", "mort_dist"))
-  expect_true(all(is.finite(terms)))
-})
-
-test_that("the homeless population term compares the 2010 population", {
-  out <- fake_outputs()
   targets <- ca_targets()
-  expect_identical(
-    demographic_llik_terms(out, targets, flat_wts())[["homeless_pop"]],
-    llik_homeless_pop(out[year_to_idx(2010), "N_HR"], targets)
-  )
+  fit <- calib_fit(fake_outputs(), fake_progression(), c(rSlfCur = 0.01, muIp = 0.02), targets)
+  nativity <- fit[fit$target == "cases_nativity", ]
+  usb <- nativity[nativity$nativity == "usb", ]
+  nusb <- nativity[nativity$nativity == "nusb", ]
+  expect_identical(terms_for("ND")[["cases_nativity_trend"]],
+                   llik_cases_nativity_trend(usb, nusb, usb_trend = -0.1))
+  expect_identical(terms_for("CA")[["cases_nativity_trend"]],
+                   llik_cases_nativity_trend(usb, nusb))
 })
 
 # The value without TB terms is what the earlier state likelihood,

@@ -111,9 +111,7 @@ calib_llik_terms <- function(p, loc, targets, wts, tb = TRUE, calib_end_year = N
   if (is.null(sim)) {
     return(NULL)
   }
-  out <- sim$out
-  terms <- if (tb) tb_llik_terms(out, sim$prms, p, loc, targets, wts) else numeric(0)
-  c(terms, demographic_llik_terms(out, targets, wts))
+  fit_llik_terms(calib_fit(sim$out, sim$prms, p, targets), loc, targets, wts, tb)
 }
 
 #' Stop unless the importance weights reach the simulation's validity check year
@@ -319,104 +317,67 @@ simulate_calibration <- function(p, loc, calib_end_year) {
   list(out = out, prms = prms)
 }
 
-#' Simulated outputs by model age group
+#' Log-likelihood terms from a fit table
 #'
-#' @param out annual simulation outputs with named columns
-#' @param prefix output name before the age group, e.g. \code{"NOTIF_"}
-#' @noRd
-by_age <- function(out, prefix) out[, paste0(prefix, model_age_groups), drop = FALSE]
-
-#' TB log-likelihood terms
-#'
-#' @param out annual simulation outputs with named columns
-#' @param prms model parameters from \code{param_init}
-#' @param p model parameter vector
+#' @param fit fit table from \code{calib_fit}
 #' @inheritParams calib_llikelihood
 #' @param wts importance weights by year
-#' @return named vector of log-likelihood terms
+#' @return named vector of log-likelihood terms, the TB terms first
 #' @noRd
-tb_llik_terms <- function(out, prms, p, loc, targets, wts) {
-  ltbi_tx_year <- year_to_idx(target_estimate(targets, "ltbi_tx_total")$start)
-  ltbi_prev_year <- year_to_idx(unique(target_obs(targets, "ltbi_prev")$start))
-  transmission <- target_estimate(targets, "recent_transmission")
-  cases <- out[, "NOTIF_ALL"] + out[, "NOTIF_MORT_ALL"]
-  cases_usb_age <- by_age(out, "NOTIF_US_") + by_age(out, "NOTIF_US_MORT_")
-  cases_nusb_age <- (by_age(out, "NOTIF_") + by_age(out, "NOTIF_MORT_")) - cases_usb_age
-  cases_usb <- out[, "NOTIF_US"] + out[, "NOTIF_MORT_US"]
-  cases_nusb <- out[, "NOTIF_F1"] + out[, "NOTIF_F2"] +
-    (out[, "NOTIF_MORT_F1"] + out[, "NOTIF_MORT_F2"])
-  recent_years <- year_to_idx(transmission$start:transmission$end)
-  recent_transmission <- sum(out[recent_years, c("INCID_REC_US", "INCID_REC_FB")]) /
-    sum(out[recent_years, c("INCID_ALL_US", "INCID_ALL_FB")])
-  tb_deaths <- by_age(out, "TOTMORT_W_TB_")
-  progression <- prms[c("Mpfast", "Mrslow", "rfast", "rRecov")]
-
+fit_llik_terms <- function(fit, loc, targets, wts, tb = TRUE) {
+  rows <- function(target, nativity = NULL) {
+    f <- fit[fit$target == target, , drop = FALSE]
+    if (!is.null(nativity)) f <- f[f$nativity == nativity, , drop = FALSE]
+    f
+  }
+  demographic <- c(
+    pop_nusb = llik_pop_total(rows("population_census", "nusb"),
+                              rows("population_total", "nusb"), wts),
+    pop_usb = llik_pop_total(rows("population_census", "usb"), rows("population_total", "usb"),
+                             wts),
+    pop_age = llik_pop_age(rows("population", "usb"), rows("population", "nusb"), wts),
+    homeless_pop = llik_homeless_pop(rows("homeless_pop"), targets),
+    deaths_total = llik_deaths_total(rows("deaths_total"), wts),
+    deaths_age = llik_deaths_age(rows("deaths_age"), wts),
+    mort_dist = llik_mort_dist(rows("mort_dist"), wts)
+  )
+  if (!tb) {
+    return(demographic)
+  }
   terms <- c(
-    cases_total = llik_cases_total(cases, targets, wts),
-    cases_decline = llik_cases_decline(cases, targets, wts),
-    cases_age_usb = llik_cases_age_5yr(cases_usb_age, "usb", targets, wts),
-    cases_age_nusb = llik_cases_age_5yr(cases_nusb_age, "nusb", targets, wts),
-    cases_nusb = llik_cases_nativity_5yr(cases_nusb, "nusb", targets, wts),
-    cases_usb = llik_cases_nativity_5yr(cases_usb, "usb", targets, wts)
+    cases_total = llik_cases_total(rows("cases_total"), wts),
+    cases_decline = llik_cases_decline(rows("cases_decline"), wts),
+    cases_age_usb = llik_cases_age_5yr(rows("cases_age", "usb"), rows("cases_nativity", "usb"),
+                                       wts),
+    cases_age_nusb = llik_cases_age_5yr(rows("cases_age", "nusb"),
+                                        rows("cases_nativity", "nusb"), wts),
+    cases_nusb = llik_cases_nativity_5yr(rows("cases_nativity", "nusb"), wts),
+    cases_usb = llik_cases_nativity_5yr(rows("cases_nativity", "usb"), wts)
   )
   if (!loc %in% locs_without_nativity_trend) {
     usb_trend <- if (loc %in% names(fixed_usb_trend)) fixed_usb_trend[[loc]] else NA
     terms["cases_nativity_trend"] <- llik_cases_nativity_trend(
-      cases_usb, cases_nusb, targets, usb_trend
+      rows("cases_nativity", "usb"), rows("cases_nativity", "nusb"), usb_trend
     )
   }
   if (!loc %in% locs_without_homeless_cases) {
-    cases_homeless <- out[, "NOTIF_HR"] + out[, "NOTIF_MORT_HR"]
-    terms["cases_homeless"] <- llik_cases_homeless(cases_homeless, targets, wts)
+    terms["cases_homeless"] <- llik_cases_homeless(rows("cases_homeless"), wts)
   }
   c(
     terms,
-    recent_transmission = llik_recent_transmission(recent_transmission, targets),
-    cases_recent_entry = llik_cases_recent_entry(
-      out[, "NOTIF_F1"] + out[, "NOTIF_MORT_F1"], targets, wts
-    ),
-    tx_outcomes = llik_tx_outcomes(
-      out[, c("TBTX_COMPLT", "TBTX_DISCONT", "TBTX_DIED")], targets, wts
-    ),
-    ltbi_tx_total = llik_ltbi_tx_total(out[ltbi_tx_year, "TLTBI_INITS"], targets),
-    ltbi_tx_dist = llik_ltbi_tx_dist(
-      out[ltbi_tx_year, c("TLTBI_INITS_FB", "TLTBI_INITS_HR")] /
-        out[ltbi_tx_year, "TLTBI_INITS"],
-      targets
-    ),
-    ltbi_prev_usb = llik_ltbi_prev_usb(
-      by_age(out, "N_US_LTBI_")[ltbi_prev_year, ], by_age(out, "N_US_")[ltbi_prev_year, ],
-      targets
-    ),
-    ltbi_prev_nusb = llik_ltbi_prev_nusb(
-      by_age(out, "N_FB_LTBI_")[ltbi_prev_year, ], by_age(out, "N_FB_")[ltbi_prev_year, ],
-      targets
-    ),
-    tb_deaths_total = llik_tb_deaths_total(tb_deaths, targets, wts),
-    tb_deaths_age = llik_tb_deaths_age(tb_deaths, targets, wts),
-    borgdorff = llik_borgdorff(progression, targets),
-    ferebee = llik_ferebee(progression, targets),
-    sutherland = llik_sutherland(progression, targets),
-    tiemersma = llik_tiemersma(p[["rSlfCur"]], p[["muIp"]])
-  )
-}
-
-#' Demographic log-likelihood terms
-#'
-#' @inheritParams tb_llik_terms
-#' @return named vector of log-likelihood terms
-#' @noRd
-demographic_llik_terms <- function(out, targets, wts) {
-  deaths <- by_age(out, "TOTMORT_")
-  mort_groups <- out[, paste0("N_ag_", rep(seq_along(model_age_groups), each = 4), "_M", 1:4)]
-  homeless_year <- year_to_idx(target_estimate(targets, "homeless_pop")$start)
-  c(
-    pop_nusb = llik_pop_total(out[, "N_F1"] + out[, "N_F2"], "nusb", targets, wts),
-    pop_usb = llik_pop_total(out[, "N_US"], "usb", targets, wts),
-    pop_age = llik_pop_age(by_age(out, "N_US_"), by_age(out, "N_FB_"), targets, wts),
-    homeless_pop = llik_homeless_pop(out[homeless_year, "N_HR"], targets),
-    deaths_total = llik_deaths_total(deaths, targets, wts),
-    deaths_age = llik_deaths_age(deaths, targets, wts),
-    mort_dist = llik_mort_dist(mort_groups, wts)
+    recent_transmission = llik_recent_transmission(rows("recent_transmission")),
+    cases_recent_entry = llik_cases_recent_entry(rows("cases_recent_entry"), wts),
+    tx_outcomes = llik_tx_outcomes(rows("tx_outcomes"), wts),
+    ltbi_tx_total = llik_ltbi_tx_total(rows("ltbi_tx_total"), targets),
+    ltbi_tx_dist = llik_ltbi_tx_dist(rows("ltbi_tx_share")),
+    ltbi_prev_usb = llik_ltbi_prev(rows("ltbi_prev", "usb")),
+    ltbi_prev_nusb = llik_ltbi_prev(rows("ltbi_prev", "nusb")),
+    tb_deaths_total = llik_tb_deaths_total(rows("tb_deaths_total"), wts),
+    tb_deaths_age = llik_tb_deaths_age(rows("tb_deaths_age"), wts),
+    borgdorff = llik_borgdorff(rows("borgdorff")),
+    ferebee = llik_cohort(rows("ferebee")),
+    sutherland = llik_cohort(rows("sutherland")),
+    tiemersma = llik_tiemersma(rows("tiemersma")),
+    demographic
   )
 }

@@ -1,15 +1,13 @@
 # Log-likelihood terms comparing one location's simulation with its calibration
-# targets, one function per target. Each term is a log-likelihood less its
-# value at a reference fit: the targets themselves, or for Dirichlet-multinomial
-# terms the targets plus a small count. A term is near zero for a good fit. The
-# beta and Dirichlet-multinomial densities peak slightly away from the
-# reference, so those terms can be slightly positive.
+# targets, one function per target. Each term takes the target's rows of the fit
+# table from calib_fit(): the observed values and the simulated values they are
+# compared with. Each term is a log-likelihood less its value at a reference
+# fit: the targets themselves, or for Dirichlet-multinomial terms the targets
+# plus a small count. A term is near zero for a good fit. The beta and
+# Dirichlet-multinomial densities peak slightly away from the reference, so
+# those terms can be slightly positive.
 #
-# Simulated values come in as annual series with one row per simulated year,
-# the first row being the model's base year. Simulated counts are in millions,
-# as the model reports them. Targets come from calib_targets(): each term reads
-# its rows, and the years each row covers, from them. wts are the importance
-# weights by year set by model_load().
+# wts are the importance weights by year set by model_load().
 
 # The model's 11 age groups.
 model_age_groups <- c(
@@ -114,19 +112,24 @@ case_age_cols <- function(d) {
   grep("^X[0-9]", colnames(d), value = TRUE)
 }
 
-#' Observed values of target rows as a matrix with one row per year or period
+#' One column of target or fit rows as a matrix with one row per year or period
 #' and one column per group
 #'
-#' @param d target rows
+#' @param d target or fit rows
 #' @param groups the groups, in column order
+#' @param column the column of \code{d} holding the values
 #' @return list of the periods and the matrix of values
 #' @noRd
-obs_by_group <- function(d, groups) {
+obs_by_group <- function(d, groups, column = "value") {
   periods <- target_periods(d)
   values <- matrix(NA_real_, nrow(periods), length(groups))
-  values[cbind(match(d$start, periods$start), match(d$group, groups))] <- d$value
+  values[cbind(match(d$start, periods$start), match(d$group, groups))] <- d[[column]]
   list(periods = periods, values = values)
 }
+
+#' Rows of fit rows within the importance weights
+#' @noRd
+weighted_rows <- function(f, wts) f[weighted_years(f$start, wts), , drop = FALSE]
 
 #' Total cases each year
 #'
@@ -134,43 +137,36 @@ obs_by_group <- function(d, groups) {
 #' with no reported cases are left out. The weight of the latest weighted year
 #' is doubled; when that year has no reported cases, no year is doubled.
 #'
-#' @param sim_cases simulated cases, in millions
+#' @param f fit rows of the target
 #' @noRd
-llik_cases_total <- function(sim_cases, targets, wts) {
-  d <- target_obs(targets, "cases_total")
-  d <- d[weighted_years(d$start, wts), , drop = FALSE]
-  w <- year_wts(wts, d$start)
+llik_cases_total <- function(f, wts) {
+  f <- weighted_rows(f, wts)
+  w <- year_wts(wts, f$start)
   w[length(w)] <- 2 * w[length(w)]
-  sim <- sim_cases[year_to_idx(d$start)] * 1e6
-  reported <- !is.na(d$value) & d$value != 0
-  obs <- d$value[reported]
-  llik_normal(obs, sim[reported], sd_from_interval(obs, 0.1), w[reported])
+  reported <- !is.na(f$observed) & f$observed != 0
+  obs <- f$observed[reported]
+  llik_normal(obs, f$simulated[reported], sd_from_interval(obs, 0.1), w[reported])
 }
 
 #' Decline in total cases, 1953-1993
 #'
 #' Normal around the expected cases, with a 95% interval of +/- 20%.
 #'
-#' @param sim_cases simulated cases, in millions
+#' @param f fit rows of the target
 #' @noRd
-llik_cases_decline <- function(sim_cases, targets, wts) {
-  d <- target_obs(targets, "cases_decline")
-  sim <- sim_cases[year_to_idx(d$start)] * 1e6
-  llik_normal(d$value, sim, sd_from_interval(d$value, 0.2), year_wts(wts, d$start))
+llik_cases_decline <- function(f, wts) {
+  llik_normal(f$observed, f$simulated, sd_from_interval(f$observed, 0.2), year_wts(wts, f$start))
 }
 
 #' Cases in one nativity group, in 5-year buckets
 #'
 #' Normal, with a 95% interval of +/- 5%.
 #'
-#' @param sim_cases simulated cases in the nativity group, in millions
-#' @param nativity \code{"usb"} or \code{"nusb"}
+#' @param f fit rows of the target for one nativity group
 #' @noRd
-llik_cases_nativity_5yr <- function(sim_cases, nativity, targets, wts) {
-  d <- target_obs(targets, "cases_nativity", nativity)
-  sim <- sum_periods(sim_cases, d$start, d$end) * 1e6
-  w <- period_wts(wts, d$start, d$end)
-  llik_normal(d$value, sim, sd_from_interval(d$value, 0.05), w)
+llik_cases_nativity_5yr <- function(f, wts) {
+  llik_normal(f$observed, f$simulated, sd_from_interval(f$observed, 0.05),
+              period_wts(wts, f$start, f$end))
 }
 
 #' Trend in cases by nativity across the two most recent 5-year buckets
@@ -178,16 +174,16 @@ llik_cases_nativity_5yr <- function(sim_cases, nativity, targets, wts) {
 #' Normal on the change in log cases between the two buckets, with standard
 #' deviation 0.005.
 #'
-#' @param sim_usb,sim_nusb simulated US-born and non-US-born cases, on any scale
+#' @param f_usb,f_nusb fit rows of cases by nativity for each nativity group
 #' @param usb_trend target for the US-born trend in place of the data's, or NA
 #' @noRd
-llik_cases_nativity_trend <- function(sim_usb, sim_nusb, targets, usb_trend = NA) {
-  trend <- function(nativity, sim) {
-    d <- utils::tail(target_obs(targets, "cases_nativity", nativity), 2)
-    c(obs = diff(log(d$value)), sim = diff(log(sum_periods(sim, d$start, d$end))))
+llik_cases_nativity_trend <- function(f_usb, f_nusb, usb_trend = NA) {
+  trend <- function(f) {
+    f <- utils::tail(f[order(f$start), , drop = FALSE], 2)
+    c(obs = diff(log(f$observed)), sim = diff(log(f$simulated)))
   }
-  nusb <- trend("nusb", sim_nusb)
-  usb <- trend("usb", sim_usb)
+  nusb <- trend(f_nusb)
+  usb <- trend(f_usb)
   obs <- c(nusb = nusb[["obs"]], usb = usb[["obs"]])
   if (!is.na(usb_trend)) {
     obs[["usb"]] <- usb_trend
@@ -201,18 +197,16 @@ llik_cases_nativity_trend <- function(sim_usb, sim_nusb, targets, usb_trend = NA
 #' group holding the bucket's remaining cases, taken from the bucket's cases by
 #' nativity.
 #'
-#' @param sim_by_age simulated cases in the nativity group, in millions, one
-#'   column per model age group
-#' @param nativity \code{"usb"} or \code{"nusb"}
+#' @param f fit rows of cases by age for one nativity group
+#' @param f_totals fit rows of cases by nativity for the same group
 #' @param rho correlation parameter
 #' @noRd
-llik_cases_age_5yr <- function(sim_by_age, nativity, targets, wts, rho = 0.1) {
-  by_age <- obs_by_group(target_obs(targets, "cases_age", nativity), data_age_groups)
-  periods <- by_age$periods
-  obs <- by_age$values
-  totals_d <- target_obs(targets, "cases_nativity", nativity)
-  totals <- totals_d$value[match(periods$start, totals_d$start)]
-  sim <- sum_periods(merge_85_plus(sim_by_age), periods$start, periods$end)
+llik_cases_age_5yr <- function(f, f_totals, wts, rho = 0.1) {
+  observed <- obs_by_group(f, data_age_groups, "observed")
+  periods <- observed$periods
+  obs <- observed$values
+  sim <- obs_by_group(f, data_age_groups, "simulated")$values
+  totals <- f_totals$observed[match(periods$start, f_totals$start)]
   w <- period_wts(wts, periods$start, periods$end)
   terms <- vapply(seq_len(nrow(obs)), function(i) {
     o <- obs[i, ]
@@ -222,7 +216,7 @@ llik_cases_age_5yr <- function(sim_by_age, nativity, targets, wts, rho = 0.1) {
       o <- c(o[!suppressed], totals[i] - sum(o[!suppressed]))
       s <- c(s[!suppressed], sum(s) - sum(s[!suppressed]))
     }
-    llik_dirmult(o, s * 1e6, rho, w[i], pad = 0.01)
+    llik_dirmult(o, s, rho, w[i], pad = 0.01)
   }, numeric(1))
   sum(terms)
 }
@@ -231,25 +225,23 @@ llik_cases_age_5yr <- function(sim_by_age, nativity, targets, wts, rho = 0.1) {
 #'
 #' Normal around the smoothed counts, with a 95% interval of +/- 10%.
 #'
-#' @param sim_cases simulated homeless cases, in millions
+#' @param f fit rows of the target
 #' @noRd
-llik_cases_homeless <- function(sim_cases, targets, wts) {
-  d <- target_obs(targets, "cases_homeless")
-  sim <- sum_periods(sim_cases, d$start, d$end) * 1e6
-  w <- period_wts(wts, d$start, d$end)
-  llik_normal(d$value, sim, sd_from_interval(d$value, 0.1), w)
+llik_cases_homeless <- function(f, wts) {
+  llik_normal(f$observed, f$simulated, sd_from_interval(f$observed, 0.1),
+              period_wts(wts, f$start, f$end))
 }
 
 #' Fraction of cases from recent transmission
 #'
 #' Beta with effective sample size 1000.
 #'
-#' @param sim_fraction simulated fraction of cases from recent transmission over
-#'   the target's years
+#' @param f fit row of the target
 #' @noRd
-llik_recent_transmission <- function(sim_fraction, targets) {
-  obs <- target_estimate(targets, "recent_transmission")$estimate
-  stats::dbeta(obs, sim_fraction * 1000, (1 - sim_fraction) * 1000, log = TRUE) -
+llik_recent_transmission <- function(f) {
+  obs <- f$observed
+  sim <- f$simulated
+  stats::dbeta(obs, sim * 1000, (1 - sim) * 1000, log = TRUE) -
     stats::dbeta(obs, obs * 1000, (1 - obs) * 1000, log = TRUE)
 }
 
@@ -257,29 +249,26 @@ llik_recent_transmission <- function(sim_fraction, targets) {
 #'
 #' Normal, with a 95% interval of +/- 10%.
 #'
-#' @param sim_cases simulated cases among recent arrivals, in millions
+#' @param f fit rows of the target
 #' @noRd
-llik_cases_recent_entry <- function(sim_cases, targets, wts) {
-  d <- target_obs(targets, "cases_recent_entry")
-  sim <- sum_periods(sim_cases, d$start, d$end) * 1e6
-  w <- period_wts(wts, d$start, d$end)
-  llik_normal(d$value, sim, sd_from_interval(d$value, 0.1), w)
+llik_cases_recent_entry <- function(f, wts) {
+  llik_normal(f$observed, f$simulated, sd_from_interval(f$observed, 0.1),
+              period_wts(wts, f$start, f$end))
 }
 
 #' Treatment outcomes each year: completed, discontinued and died
 #'
 #' Dirichlet-multinomial.
 #'
-#' @param sim_outcomes simulated outcomes, three columns in that order, on any
-#'   scale
+#' @param f fit rows of the target
 #' @param rho correlation parameter
 #' @noRd
-llik_tx_outcomes <- function(sim_outcomes, targets, wts, rho = 0.01) {
-  d <- target_obs(targets, "tx_outcomes")
-  outcomes <- obs_by_group(d[weighted_years(d$start, wts), , drop = FALSE], tx_outcome_groups)
-  years <- outcomes$periods$start
-  sim <- sim_outcomes[year_to_idx(years), , drop = FALSE]
-  llik_dirmult(outcomes$values, sim, rho, year_wts(wts, years), pad = 0.01)
+llik_tx_outcomes <- function(f, wts, rho = 0.01) {
+  f <- weighted_rows(f, wts)
+  observed <- obs_by_group(f, tx_outcome_groups, "observed")
+  sim <- obs_by_group(f, tx_outcome_groups, "simulated")$values
+  years <- observed$periods$start
+  llik_dirmult(observed$values, sim, rho, year_wts(wts, years), pad = 0.01)
 }
 
 #' LTBI treatment starts
@@ -287,23 +276,24 @@ llik_tx_outcomes <- function(sim_outcomes, targets, wts, rho = 0.01) {
 #' Normal, centred on the estimate, with standard deviation (upper - lower) /
 #' 1.96 from its interval.
 #'
-#' @param sim_starts simulated treatment starts in the estimate's year, in
-#'   millions
+#' @param f fit row of the target
 #' @noRd
-llik_ltbi_tx_total <- function(sim_starts, targets) {
+llik_ltbi_tx_total <- function(f, targets) {
   est <- target_estimate(targets, "ltbi_tx_total")
-  llik_normal(est$estimate, sim_starts * 1e6, (est$upper - est$lower) / 1.96, 1)
+  llik_normal(f$observed, f$simulated, (est$upper - est$lower) / 1.96, 1)
 }
 
 #' Fractions of LTBI treatment starts that are non-US-born and homeless
 #'
 #' Beta with effective sample size 100.
 #'
-#' @param sim_fractions simulated non-US-born and homeless fractions
+#' @param f fit rows of the target
 #' @noRd
-llik_ltbi_tx_dist <- function(sim_fractions, targets) {
-  obs <- target_estimate(targets, "ltbi_tx_share", c("nusb", "homeless"))$estimate
-  sum(stats::dbeta(obs, sim_fractions * 100, (1 - sim_fractions) * 100, log = TRUE)) -
+llik_ltbi_tx_dist <- function(f) {
+  f <- f[match(c("nusb", "homeless"), f$group), , drop = FALSE]
+  obs <- f$observed
+  sim <- f$simulated
+  sum(stats::dbeta(obs, sim * 100, (1 - sim) * 100, log = TRUE)) -
     sum(stats::dbeta(obs, obs * 100, (1 - obs) * 100, log = TRUE))
 }
 
@@ -318,83 +308,63 @@ igra_results <- function(ltbi, no_ltbi, sens, spec) {
   outer(ltbi, c(sens, 1 - sens)) + outer(no_ltbi, c(1 - spec, spec))
 }
 
-#' IGRA-positive fraction by age in the survey year
+#' Expected IGRA-positive fraction in each of the survey's age groups
 #'
-#' Beta on the survey's positive and negative counts in each age group from
-#' 5-14 to 75+, the survey's eight age groups. Counts four times.
+#' The survey's eight age groups run from 5-14 to 75+; the model's 75-84, 85-94
+#' and 95+ are pooled into 75+.
 #'
 #' @param tested expected positive and negative results, one row per model age
 #'   group
-#' @param survey survey rows, one per survey age group, with the positive count
-#'   as \code{value} and the number tested as \code{total}
 #' @noRd
-llik_ltbi_prev <- function(tested, survey) {
-  # Pool the model's 75-84, 85-94 and 95+ into the survey's 75+
+igra_positive_fraction <- function(tested) {
   tested[9, ] <- colSums(tested[9:11, ])
   survey_ages <- 2:9
-  sim <- tested[survey_ages, 1] / rowSums(tested[survey_ages, ])
-  positive <- survey$value
-  negative <- survey$total - survey$value
-  obs <- positive / survey$total
+  tested[survey_ages, 1] / rowSums(tested[survey_ages, ])
+}
+
+#' IGRA-positive fraction by age in the survey year
+#'
+#' Beta on the survey's positive and negative counts in each age group. Counts
+#' four times.
+#'
+#' @param f fit rows of the target for one nativity group, with the positive
+#'   count as \code{observed}, the number tested as \code{total}, and the
+#'   expected positive count as \code{simulated}
+#' @noRd
+llik_ltbi_prev <- function(f) {
+  positive <- f$observed
+  negative <- f$total - f$observed
+  sim <- f$simulated / f$total
+  obs <- positive / f$total
   (sum(stats::dbeta(sim, positive, negative, log = TRUE)) -
      sum(stats::dbeta(obs, positive, negative, log = TRUE))) * 4
-}
-
-#' IGRA-positive fraction by age among US-born people
-#'
-#' @param sim_ltbi,sim_pop simulated US-born people with LTBI and in total in the
-#'   survey year, by model age group, on any common scale
-#' @noRd
-llik_ltbi_prev_usb <- function(sim_ltbi, sim_pop, targets) {
-  tested <- igra_results(sim_ltbi, sim_pop - sim_ltbi, igra_sens[["usb"]], igra_spec[["usb"]])
-  llik_ltbi_prev(tested, target_obs(targets, "ltbi_prev", "usb"))
-}
-
-#' IGRA-positive fraction by age among non-US-born people
-#'
-#' Children under 5 take their own IGRA accuracy. The survey starts at age 5, so
-#' their results do not enter the likelihood.
-#'
-#' @param sim_ltbi,sim_pop simulated non-US-born people with LTBI and in total in
-#'   the survey year, by model age group, on any common scale
-#' @noRd
-llik_ltbi_prev_nusb <- function(sim_ltbi, sim_pop, targets) {
-  no_ltbi <- sim_pop - sim_ltbi
-  tested <- rbind(
-    igra_results(sim_ltbi[1], no_ltbi[1], igra_sens[["nusb_young"]], igra_spec[["nusb_young"]]),
-    igra_results(sim_ltbi[-1], no_ltbi[-1], igra_sens[["nusb"]], igra_spec[["nusb"]])
-  )
-  llik_ltbi_prev(tested, target_obs(targets, "ltbi_prev", "nusb"))
 }
 
 #' Deaths with TB each year
 #'
 #' Normal, with a 95% interval of +/- 10%. Years without data are left out.
 #'
-#' @param sim_deaths simulated deaths with TB, in millions, one column per model
-#'   age group
+#' @param f fit rows of the target
 #' @noRd
-llik_tb_deaths_total <- function(sim_deaths, targets, wts) {
-  d <- target_obs(targets, "tb_deaths_total")
-  d <- d[weighted_years(d$start, wts) & !is.na(d$value), , drop = FALSE]
-  sim <- rowSums(sim_deaths[year_to_idx(d$start), , drop = FALSE]) * 1e6
-  llik_normal(d$value, sim, sd_from_interval(d$value, 0.1), year_wts(wts, d$start))
+llik_tb_deaths_total <- function(f, wts) {
+  f <- weighted_rows(f, wts)
+  f <- f[!is.na(f$observed), , drop = FALSE]
+  llik_normal(f$observed, f$simulated, sd_from_interval(f$observed, 0.1), year_wts(wts, f$start))
 }
 
 #' Age distribution of deaths with TB each year
 #'
 #' Dirichlet-multinomial.
 #'
-#' @param sim_deaths simulated deaths with TB, one column per model age group, on
-#'   any scale
+#' @param f fit rows of the target
 #' @param rho correlation parameter
 #' @noRd
-llik_tb_deaths_age <- function(sim_deaths, targets, wts, rho = 0.005) {
-  d <- target_obs(targets, "tb_deaths_age")
-  by_age <- obs_by_group(d[weighted_years(d$start, wts), , drop = FALSE], data_age_groups)
-  years <- by_age$periods$start
-  sim <- merge_85_plus(sim_deaths[year_to_idx(years), , drop = FALSE])
-  llik_dirmult(by_age$values, sim, rho, year_wts(wts, years), pad = 0.005)
+llik_tb_deaths_age <- function(f, wts, rho = 0.005) {
+  f <- weighted_rows(f, wts)
+  observed <- obs_by_group(f, data_age_groups, "observed")
+  sim <- obs_by_group(f, data_age_groups, "simulated")$values
+  years <- observed$periods$start
+  llik_dirmult(observed$values, sim, rho, year_wts(wts, years), pad = 0.005)
 }
 
 #' Probability of not having developed TB at each time since infection
@@ -435,54 +405,34 @@ study_llik <- function(value) {
 #' Binomial on each interval's share of cases, with effective sample size
 #' 854.5463 / 4.
 #'
-#' @param progression see \code{tb_free_probability}
+#' @param f fit rows of the target
 #' @noRd
-llik_borgdorff <- function(progression, targets) {
+llik_borgdorff <- function(f) {
   ss <- 854.5463 / 4
-  d <- targets$studies$borgdorff_data
-  obs <- diff(-d[, "mean"])
+  obs <- f$observed
+  sim <- f$simulated
   adj <- sum(obs * ss * log(obs) + (1 - obs) * ss * log(1 - obs))
-  study_llik({
-    p_free <- tb_free_probability(progression, d[, "Years"])
-    sim <- diff(-(1 - (1 - p_free) / (1 - p_free)[nrow(d)]))
-    sum(obs * ss * log(sim) + (1 - obs) * ss * log(1 - sim)) - adj
-  })
+  study_llik(sum(obs * ss * log(sim) + (1 - obs) * ss * log(1 - sim)) - adj)
 }
 
 #' Annual TB incidence after infection in a published cohort
 #'
 #' Binomial on each year's cases among those still TB-free, divided by 4.
 #'
-#' @param progression see \code{tb_free_probability}
-#' @param d cohort data, one row per year: the year, people at risk
-#'   (\code{At_Risk}), and cases in the third column
+#' @param f fit rows of the target, with each year's cases as \code{observed},
+#'   the people at risk as \code{total}, and the simulated rate as
+#'   \code{simulated}
 #' @noRd
-llik_cohort <- function(progression, d) {
-  at_risk <- d[, "At_Risk"]
-  cases <- d[, 3]
+llik_cohort <- function(f) {
+  cases <- f$observed
+  at_risk <- f$total
+  rate <- f$simulated
   # Years with no cases have no reference rate, so count 0.01 cases there
   fit_cases <- replace(cases, cases == 0, 0.01)
   adj <- sum(
     fit_cases * log(fit_cases / at_risk) + (at_risk - fit_cases) * log(1 - fit_cases / at_risk)
   )
-  n_years <- nrow(d)
-  study_llik({
-    p_free <- tb_free_probability(progression, 0:n_years)
-    rate <- -log(1 - diff(-p_free) / p_free[-(n_years + 1)])
-    sum(cases * log(rate) + (at_risk - cases) * log(1 - rate)) / 4 - adj / 4
-  })
-}
-
-#' Ferebee's TB incidence after infection
-#' @noRd
-llik_ferebee <- function(progression, targets) {
-  llik_cohort(progression, targets$studies$ferebee_data)
-}
-
-#' Sutherland's TB incidence after infection
-#' @noRd
-llik_sutherland <- function(progression, targets) {
-  llik_cohort(progression, targets$studies$sutherland_data)
+  study_llik(sum(cases * log(rate) + (at_risk - cases) * log(1 - rate)) / 4 - adj / 4)
 }
 
 #' Tiemersma's duration of untreated TB and its case fatality
@@ -490,58 +440,35 @@ llik_sutherland <- function(progression, targets) {
 #' Normal on a duration of 3 years, with a 95% interval of +/- 0.5 years, and
 #' beta on a case fatality of 0.9, with effective sample size 50.
 #'
-#' @param self_cure,mortality monthly rates of self-cure and death from
-#'   untreated TB
+#' @param f fit rows of the target: the duration and the case fatality
 #' @noRd
-llik_tiemersma <- function(self_cure, mortality) {
-  self_cure <- self_cure * 12
-  mortality <- mortality * 12
-  duration <- 1 / (self_cure + mortality)
-  fatality <- mortality / (self_cure + mortality)
-  adj <- stats::dnorm(3, 3, 0.5 / 1.96, log = TRUE) +
-    stats::dbeta(0.9, 0.9 * 50, (1 - 0.9) * 50, log = TRUE)
-  stats::dnorm(3, duration, 0.5 / 1.96, log = TRUE) +
-    stats::dbeta(0.9, fatality * 50, (1 - fatality) * 50, log = TRUE) - adj
-}
-
-#' Weighted years of the annual population rows, earliest first
-#' @noRd
-population_years <- function(targets, wts) {
-  years <- unique(target_obs(targets, "population")$start)
-  sort(years[weighted_years(years, wts)])
+llik_tiemersma <- function(f) {
+  value <- function(column, quantity) f[[column]][f$group == quantity]
+  duration <- value("observed", "duration")
+  fatality <- value("observed", "fatality")
+  adj <- stats::dnorm(duration, duration, 0.5 / 1.96, log = TRUE) +
+    stats::dbeta(fatality, fatality * 50, (1 - fatality) * 50, log = TRUE)
+  sim_fatality <- value("simulated", "fatality")
+  stats::dnorm(duration, value("simulated", "duration"), 0.5 / 1.96, log = TRUE) +
+    stats::dbeta(fatality, sim_fatality * 50, (1 - sim_fatality) * 50, log = TRUE) - adj
 }
 
 #' Total population of one nativity group: each census after the first, and
 #' the latest weighted year of the annual population
 #'
-#' @param nativity \code{"usb"} or \code{"nusb"}
-#' @return list of years, population, and the population of the last census,
-#'   which sets the interval width
-#' @noRd
-pop_total_obs <- function(targets, nativity, wts) {
-  census <- target_obs(targets, "population_census", nativity)[-1, , drop = FALSE]
-  annual <- target_obs(targets, "population", nativity)
-  latest <- max(population_years(targets, wts))
-  list(
-    years = c(census$start, latest),
-    pop = c(census$value, sum(annual$value[annual$start == latest])),
-    last_census_pop = census$value[nrow(census)]
-  )
-}
-
-#' Total population of one nativity group
-#'
 #' Normal, with a 95% interval of +/- 5% of the last census.
 #'
-#' @param sim_pop simulated population of the group, in millions
-#' @param nativity \code{"usb"} or \code{"nusb"}
+#' @param f_census fit rows of the census populations for the group
+#' @param f_total fit rows of the group's annual total population
 #' @noRd
-llik_pop_total <- function(sim_pop, nativity, targets, wts) {
-  tg <- pop_total_obs(targets, nativity, wts)
-  sim <- sim_pop[year_to_idx(tg$years)] * 1e6
-  llik_normal(
-    tg$pop, sim, sd_from_interval(tg$last_census_pop, 0.05), year_wts(wts, tg$years)
-  )
+llik_pop_total <- function(f_census, f_total, wts) {
+  census <- f_census[order(f_census$start), , drop = FALSE][-1, , drop = FALSE]
+  annual <- weighted_rows(f_total, wts)
+  latest <- annual[annual$start == max(annual$start), , drop = FALSE]
+  years <- c(census$start, latest$start)
+  sd <- sd_from_interval(census$observed[nrow(census)], 0.05)
+  llik_normal(c(census$observed, latest$observed), c(census$simulated, latest$simulated), sd,
+              year_wts(wts, years))
 }
 
 #' Age distribution of the population by nativity, over the latest years
@@ -549,28 +476,21 @@ llik_pop_total <- function(sim_pop, nativity, targets, wts) {
 #' Multinomial with effective sample size \code{ess}, on the population summed
 #' over the latest \code{n_years} weighted years.
 #'
-#' @param sim_usb,sim_nusb simulated US-born and non-US-born population, one
-#'   column per model age group, on any common scale
+#' @param f_usb,f_nusb fit rows of the annual population by age for each
+#'   nativity group
 #' @param ess effective sample size
 #' @param n_years number of latest years pooled
 #' @noRd
-llik_pop_age <- function(sim_usb, sim_nusb, targets, wts, ess = 500, n_years = 3) {
-  years <- utils::tail(population_years(targets, wts), n_years)
-  pooled <- function(nativity) {
-    d <- target_obs(targets, "population", nativity)
-    d <- d[d$start %in% years, , drop = FALSE]
-    vapply(data_age_groups, function(age) sum(d$value[d$group == age]), numeric(1))
+llik_pop_age <- function(f_usb, f_nusb, wts, ess = 500, n_years = 3) {
+  years <- utils::tail(sort(unique(weighted_rows(f_usb, wts)$start)), n_years)
+  pooled <- function(f, column) {
+    f <- f[f$start %in% years, , drop = FALSE]
+    shares <- vapply(data_age_groups, function(age) sum(f[[column]][f$group == age]), numeric(1))
+    shares / sum(shares)
   }
-  pop_usb <- pooled("usb")
-  pop_nusb <- pooled("nusb")
-  obs <- cbind(pop_usb / sum(pop_usb), pop_nusb / sum(pop_nusb))
+  obs <- cbind(pooled(f_usb, "observed"), pooled(f_nusb, "observed"))
+  sim <- cbind(pooled(f_usb, "simulated"), pooled(f_nusb, "simulated"))
   adj <- (sum(log(obs[, 1]) * obs[, 1]) + sum(log(obs[, 2]) * obs[, 2])) * ess
-  by_age <- cbind(
-    colSums(sim_usb[year_to_idx(years), , drop = FALSE]),
-    colSums(sim_nusb[year_to_idx(years), , drop = FALSE])
-  )
-  by_age <- t(merge_85_plus(t(by_age)))
-  sim <- cbind(by_age[, 1] / sum(by_age[, 1]), by_age[, 2] / sum(by_age[, 2]))
   (sum(log(sim[, 1]) * obs[, 1]) + sum(log(sim[, 2]) * obs[, 2])) * ess - adj
 }
 
@@ -579,61 +499,57 @@ llik_pop_age <- function(sim_usb, sim_nusb, targets, wts, ess = 500, n_years = 3
 #' Normal, with standard deviation (upper - lower) / 2 / 1.96 from the
 #' estimate's interval.
 #'
-#' @param sim_homeless simulated homeless population in the estimate's year, in
-#'   millions, as is the target
+#' @param f fit row of the target
 #' @noRd
-llik_homeless_pop <- function(sim_homeless, targets) {
+llik_homeless_pop <- function(f, targets) {
   est <- target_estimate(targets, "homeless_pop")
-  llik_normal(est$estimate, sim_homeless, (est$upper - est$lower) / 2 / 1.96, 1)
+  llik_normal(f$observed, f$simulated, (est$upper - est$lower) / 2 / 1.96, 1)
 }
 
 #' All-cause deaths in the latest weighted year
 #'
 #' Normal, with a 95% interval of +/- 10%.
 #'
-#' @param sim_deaths simulated deaths, in millions, one column per model age group
+#' @param f fit rows of the target
 #' @noRd
-llik_deaths_total <- function(sim_deaths, targets, wts) {
-  d <- target_obs(targets, "deaths_total")
-  year <- max(d$start[weighted_years(d$start, wts)])
-  obs <- d$value[d$start == year]
-  sim <- rowSums(sim_deaths[year_to_idx(year), , drop = FALSE]) * 1e6
-  llik_normal(obs, sim, sd_from_interval(obs, 0.1), year_wts(wts, year))
+llik_deaths_total <- function(f, wts) {
+  f <- weighted_rows(f, wts)
+  f <- f[f$start == max(f$start), , drop = FALSE]
+  llik_normal(f$observed, f$simulated, sd_from_interval(f$observed, 0.1), year_wts(wts, f$start))
 }
 
 #' Age distribution of all-cause deaths in the latest two weighted years
 #'
 #' Dirichlet-multinomial.
 #'
-#' @param sim_deaths simulated deaths, one column per model age group, on any
-#'   scale
+#' @param f fit rows of the target
 #' @param rho correlation parameter
 #' @noRd
-llik_deaths_age <- function(sim_deaths, targets, wts, rho = 0.01) {
-  d <- target_obs(targets, "deaths_age")
-  years <- utils::tail(sort(unique(d$start[weighted_years(d$start, wts)])), 2)
-  by_age <- obs_by_group(d[d$start %in% years, , drop = FALSE], data_age_groups)
-  sim <- merge_85_plus(sim_deaths[year_to_idx(years), , drop = FALSE])
-  llik_dirmult(by_age$values, sim, rho, year_wts(wts, years), pad = 0.1)
+llik_deaths_age <- function(f, wts, rho = 0.01) {
+  f <- weighted_rows(f, wts)
+  f <- f[f$start %in% utils::tail(sort(unique(f$start)), 2), , drop = FALSE]
+  observed <- obs_by_group(f, data_age_groups, "observed")
+  sim <- obs_by_group(f, data_age_groups, "simulated")$values
+  years <- observed$periods$start
+  llik_dirmult(observed$values, sim, rho, year_wts(wts, years), pad = 0.1)
 }
 
-#' Distribution of the population across mortality risk groups, 2015-2016
+#' Distribution of the population across mortality risk groups
 #'
-#' Dirichlet-multinomial in each age group, against the distribution in the
-#' package constant \code{dist_gen}, which the model assumes; there is no
-#' location data for this target.
+#' Dirichlet-multinomial in each model age group, against the distribution the
+#' model assumes; there is no location data for this target.
 #'
-#' @param sim_by_group simulated population in millions, four mortality risk
-#'   group columns for each model age group in turn
+#' @param f fit rows of the target
 #' @param rho correlation parameter
 #' @noRd
-llik_mort_dist <- function(sim_by_group, wts, rho = 0.1) {
-  years <- 2015:2016
-  obs <- matrix(rowSums(dist_gen), length(years), 4, byrow = TRUE)
-  rows <- year_to_idx(years)
-  terms <- vapply(seq_along(model_age_groups), function(age) {
-    sim <- sim_by_group[rows, (1:4) + 4 * (age - 1)] * 1e6
-    llik_dirmult(obs, sim, rho, year_wts(wts, years), pad = 0.01)
+llik_mort_dist <- function(f, wts, rho = 0.1) {
+  terms <- vapply(model_age_groups, function(age) {
+    groups <- paste0(age, "_M", 1:4)
+    rows <- f[f$group %in% groups, , drop = FALSE]
+    observed <- obs_by_group(rows, groups, "observed")
+    sim <- obs_by_group(rows, groups, "simulated")$values
+    years <- observed$periods$start
+    llik_dirmult(observed$values, sim, rho, year_wts(wts, years), pad = 0.01)
   }, numeric(1))
   sum(terms)
 }
