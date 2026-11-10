@@ -5,8 +5,8 @@
 # Last year of the input series.
 input_series_end_year <- 2100
 
-# Yearly fractional declines that forecast background mortality, applied from
-# 2017 to the year column and the first ten age groups of the mortality table.
+# Yearly fractional declines that forecast background mortality from 2017, one
+# for each age group: 0-4, 5-14, 15-24, ..., 85-94 and 95 and over.
 mortality_forecast_start <- 2017
 mortality_declines <- c(0.0159, 0.0159, 0.0090, 0.0090, 0.0090, 0.0107, 0.0107,
                         0.0083, 0.0083, 0.0069, 0.0069)
@@ -46,7 +46,7 @@ mortality_declines <- c(0.0159, 0.0159, 0.0090, 0.0090, 0.0090, 0.0107, 0.0107,
 #' @noRd
 build_input_series <- function(loc, inputs) {
   years <- year_to_idx(1950):year_to_idx(input_series_end_year)
-  mortality <- forecast_mortality(weighted_mortality(loc, inputs))
+  mortality <- forecast_mortality(weighted_mortality(loc, inputs)[, -1])
   immig <- inputs[["ImmigInputs"]]
   list(
     loc = loc,
@@ -84,16 +84,15 @@ weighted_mortality <- function(loc, inputs) {
 #' Forecast yearly mortality from \code{mortality_forecast_start} by the fixed
 #' \code{mortality_declines}
 #'
-#' @param mortality mortality table with a year column, one row per year from
-#'   1950
-#' @return the age-group columns of the table, with the forecast years replaced
+#' @param mortality mortality rates, one row per year from 1950 and one column
+#'   per age group
+#' @return \code{mortality} with the forecast years replaced
 #' @noRd
 forecast_mortality <- function(mortality) {
-  cols <- seq_along(mortality_declines)
   for (j in year_to_idx(mortality_forecast_start):nrow(mortality)) {
-    mortality[j, cols] <- mortality[j - 1, cols] * (1 - mortality_declines)
+    mortality[j, ] <- mortality[j - 1, ] * (1 - mortality_declines)
   }
-  mortality[, -1]
+  mortality
 }
 
 #' Trend in TB prevalence among immigrants: the inputs' yearly burden, declined

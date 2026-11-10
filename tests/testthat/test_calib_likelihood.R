@@ -313,20 +313,18 @@ test_that("North Dakota's US-born case trend target is fixed", {
                    llik_cases_nativity_trend(usb, nusb))
 })
 
-# The value without TB terms is what the earlier state likelihood,
-# llikelihood_st, gives for the same parameters and targets. The value with TB
-# terms differs from it only by weighting each 5-year bucket by the mean weight
-# of its years.
+# Recorded likelihoods of California's calibrated parameters with the default
+# targets, with and without the TB terms.
 test_that("California's calibrated parameters give the recorded likelihood", {
   skip_on_cran()
   local_model_load("CA")
   optim <- readRDS(system.file("CA", "CA_Optim_all_15_0708.rds", package = "MITUS"))
   par <- optim[which.min(optim[, ncol(optim)]), seq_len(nrow(calib_setup()$ParamInitZ))]
   targets <- ca_targets()
-  expect_equal(calib_llikelihood(par, "CA", targets), -351.6161192892, tolerance = 1e-10)
-  expect_equal(calib_llikelihood(par, "CA", targets, tb = FALSE), -18.8659781051,
+  expect_equal(calib_llikelihood(par, "CA", targets), -351.3337604825, tolerance = 1e-10)
+  expect_equal(calib_llikelihood(par, "CA", targets, tb = FALSE), -18.7733689726,
                tolerance = 1e-10)
   fit <- calib_fit_for(par, "CA", targets)
-  expect_equal(sum(fit_llik_terms(fit, "CA", targets, calib_setup()$wts)), -351.6161192892,
+  expect_equal(sum(fit_llik_terms(fit, "CA", targets, calib_setup()$wts)), -351.3337604825,
                tolerance = 1e-10)
 })

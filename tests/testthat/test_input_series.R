@@ -1,12 +1,11 @@
-test_that("mortality is forecast from 2017 by fixed yearly declines", {
-  mortality <- cbind(1950:2100, matrix(1, 151, 11))
-  mortality[year_to_idx(2016), -1] <- 2
+test_that("mortality is forecast from 2017 by each age group's yearly decline", {
+  mortality <- matrix(1, 151, 11)
+  mortality[year_to_idx(2016), ] <- 2
   forecast <- forecast_mortality(mortality)
-  expect_identical(dim(forecast), c(151L, 11L))
   expect_identical(forecast[year_to_idx(2016), ], rep(2, 11))
-  expect_equal(forecast[year_to_idx(2017), 1:10], 2 * (1 - mortality_declines[2:11]))
-  expect_equal(forecast[year_to_idx(2018), 1], 2 * (1 - 0.0159)^2)
-  expect_identical(forecast[year_to_idx(2017):151, 11], rep(1, 84))
+  expect_equal(forecast[year_to_idx(2017), ], 2 * (1 - mortality_declines))
+  expect_equal(forecast[year_to_idx(2018), c(1, 3, 11)], 2 * (1 - c(0.0159, 0.0090, 0.0069))^2)
+  expect_identical(forecast[year_to_idx(2015), ], rep(1, 11))
 })
 
 test_that("treatment inputs hold their last value, named by year", {
