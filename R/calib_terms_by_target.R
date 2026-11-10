@@ -19,12 +19,6 @@ model_age_groups <- c(
 # The calibration data's ten age groups: the model's, with 85-94 and 95+ pooled.
 data_age_groups <- c(model_age_groups[1:9], "85p")
 
-# The year whose importance weight each 5-year bucket carries, by bucket
-# position: for cases by nativity and age, and for homeless and recent-arrival
-# cases.
-case_bucket_wt_years <- c(1998, 2003, 2008, 2013, 2019)
-smoothed_bucket_wt_years <- c(1994, 1999, 2004, 2009, 2014)
-
 # IGRA sensitivity and specificity for US-born people, non-US-born children
 # under 5, and non-US-born people 5 and over.
 igra_sens <- c(usb = 0.780, nusb_young = 0.712, nusb = 0.789)
@@ -74,17 +68,13 @@ year_wts <- function(wts, years) wts[as.character(years)]
 #' @noRd
 weighted_years <- function(years, wts) as_year(years) %in% as.integer(names(wts))
 
-#' Weights of 5-year buckets, taken from fixed years by bucket position
+#' Weights of multi-year periods: the mean of the yearly weights over each
+#' period's years
 #'
-#' @param wt_years the year whose weight each bucket carries
-#' @param n_buckets number of buckets in the target
+#' @param start,end first and last year of each period
 #' @noRd
-bucket_wts <- function(wts, wt_years, n_buckets) {
-  if (n_buckets != length(wt_years)) {
-    stop("Bucket weights are set for ", length(wt_years), " 5-year buckets, not ", n_buckets,
-         call. = FALSE)
-  }
-  year_wts(wts, wt_years)
+period_wts <- function(wts, start, end) {
+  vapply(seq_along(start), function(i) mean(year_wts(wts, start[i]:end[i])), numeric(1))
 }
 
 #' Sum simulated values over periods of years
@@ -179,7 +169,7 @@ llik_cases_decline <- function(sim_cases, targets, wts) {
 llik_cases_nativity_5yr <- function(sim_cases, nativity, targets, wts) {
   d <- target_obs(targets, "cases_nativity", nativity)
   sim <- sum_periods(sim_cases, d$start, d$end) * 1e6
-  w <- bucket_wts(wts, case_bucket_wt_years, nrow(d))
+  w <- period_wts(wts, d$start, d$end)
   llik_normal(d$value, sim, sd_from_interval(d$value, 0.05), w)
 }
 
@@ -223,7 +213,7 @@ llik_cases_age_5yr <- function(sim_by_age, nativity, targets, wts, rho = 0.1) {
   totals_d <- target_obs(targets, "cases_nativity", nativity)
   totals <- totals_d$value[match(periods$start, totals_d$start)]
   sim <- sum_periods(merge_85_plus(sim_by_age), periods$start, periods$end)
-  w <- bucket_wts(wts, case_bucket_wt_years, nrow(periods))
+  w <- period_wts(wts, periods$start, periods$end)
   terms <- vapply(seq_len(nrow(obs)), function(i) {
     o <- obs[i, ]
     s <- sim[i, ]
@@ -246,7 +236,7 @@ llik_cases_age_5yr <- function(sim_by_age, nativity, targets, wts, rho = 0.1) {
 llik_cases_homeless <- function(sim_cases, targets, wts) {
   d <- target_obs(targets, "cases_homeless")
   sim <- sum_periods(sim_cases, d$start, d$end) * 1e6
-  w <- bucket_wts(wts, smoothed_bucket_wt_years, nrow(d))
+  w <- period_wts(wts, d$start, d$end)
   llik_normal(d$value, sim, sd_from_interval(d$value, 0.1), w)
 }
 
@@ -272,7 +262,7 @@ llik_recent_transmission <- function(sim_fraction, targets) {
 llik_cases_recent_entry <- function(sim_cases, targets, wts) {
   d <- target_obs(targets, "cases_recent_entry")
   sim <- sum_periods(sim_cases, d$start, d$end) * 1e6
-  w <- bucket_wts(wts, smoothed_bucket_wt_years, nrow(d))
+  w <- period_wts(wts, d$start, d$end)
   llik_normal(d$value, sim, sd_from_interval(d$value, 0.1), w)
 }
 

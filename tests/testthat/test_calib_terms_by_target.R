@@ -76,9 +76,18 @@ test_that("merge_85_plus adds the last two age groups", {
   expect_identical(merged[, 1:9], m[, 1:9])
 })
 
-test_that("bucket weights need one weight year for each bucket", {
-  expect_identical(bucket_wts(wts_with(c(`1998` = 7)), case_bucket_wt_years, 5)[[1]], 7)
-  expect_error(bucket_wts(flat_wts(), case_bucket_wt_years, 4), "set for 5 5-year buckets, not 4")
+# Weights that vary within each bucket and average to the bucket's position.
+bucket_mean_wts <- function(starts) {
+  w <- flat_wts()
+  for (b in seq_along(starts)) {
+    w[as.character(starts[b] + 0:4)] <- b + c(-0.4, -0.2, 0, 0.2, 0.4)
+  }
+  w
+}
+
+test_that("a period's weight is the mean of its years' weights", {
+  w <- wts_with(c(`2000` = 1, `2001` = 2, `2002` = 6))
+  expect_equal(period_wts(w, c(2000, 2002), c(2002, 2002)), c(3, 6))
 })
 
 test_that("total cases skip zero and missing years and double the latest", {
@@ -108,10 +117,10 @@ test_that("nativity buckets are summed over the years each bucket covers", {
   expect_lt(llik_cases_nativity_5yr(spread_over(nusb), "nusb", targets, flat_wts()), -1)
 })
 
-test_that("each nativity bucket carries the weight of 1998, 2003, 2008, 2013 or 2019", {
+test_that("each nativity bucket carries the mean weight of its years", {
   nusb <- c(500, 450, 400, 350, 300)
   targets <- nativity_targets(nusb, nusb)
-  bucket_wts <- wts_with(c(`1998` = 1, `2003` = 2, `2008` = 3, `2013` = 4, `2019` = 5))
+  bucket_wts <- bucket_mean_wts(bucket_starts)
   for (b in 1:5) {
     off <- spread_over(replace(nusb, b, nusb[b] + 10))
     expected <- b * normal_diff(nusb[b], nusb[b] + 10, nusb[b] * 0.05 / 1.96)
@@ -172,11 +181,11 @@ test_that("the case age distribution is zero when the simulation matches", {
   expect_lt(llik_cases_age_5yr(age_sim(counts[, 10:1] + 0.01), "usb", targets, flat_wts()), -1)
 })
 
-test_that("the case age distribution uses rho 0.1 and each bucket's weight", {
+test_that("the case age distribution uses rho 0.1 and each bucket's mean weight", {
   set.seed(4)
   counts <- matrix(sample(20:200, 50, replace = TRUE), 5, 10)
   reversed <- counts[, 10:1] + 0.01
-  bucket_wts <- wts_with(c(`1998` = 1, `2003` = 2, `2008` = 3, `2013` = 4, `2019` = 5))
+  bucket_wts <- bucket_mean_wts(bucket_starts)
   expected <- sum(vapply(1:5, function(b) {
     llik_dirmult(counts[b, ], reversed[b, ], rho = 0.1, w = b, pad = 0.01)
   }, numeric(1)))
@@ -202,12 +211,12 @@ test_that("suppressed age groups are pooled into the bucket's remaining cases", 
   expect_equal(llik_cases_age_5yr(age_sim(sim_counts), "usb", targets, flat_wts()), matched)
 })
 
-test_that("homeless cases are summed over their buckets and weighted by position", {
+test_that("homeless cases are summed over their buckets and weighted by their years", {
   obs <- c(100, 90, 80, 70, 60)
-  starts <- bucket_starts + 2L
+  starts <- bucket_starts - 2L
   targets <- targets_of(obs_rows("cases_homeless", starts, starts + 4L, obs))
   expect_equal(llik_cases_homeless(spread_over(obs, starts), targets, flat_wts()), 0)
-  bucket_wts <- wts_with(c(`1994` = 1, `1999` = 2, `2004` = 3, `2009` = 4, `2014` = 5))
+  bucket_wts <- bucket_mean_wts(starts)
   for (b in 1:5) {
     off <- spread_over(replace(obs, b, obs[b] + 6), starts)
     expected <- b * normal_diff(obs[b], obs[b] + 6, obs[b] * 0.1 / 1.96)
@@ -226,7 +235,7 @@ test_that("recent-arrival cases are summed over their buckets", {
   starts <- bucket_starts - 1L
   targets <- targets_of(obs_rows("cases_recent_entry", starts, starts + 4L, obs))
   expect_equal(llik_cases_recent_entry(spread_over(obs, starts), targets, flat_wts()), 0)
-  bucket_wts <- wts_with(c(`1994` = 1, `1999` = 2, `2004` = 3, `2009` = 4, `2014` = 5))
+  bucket_wts <- bucket_mean_wts(starts)
   off <- spread_over(replace(obs, 3, obs[3] * 1.1), starts)
   expected <- 3 * normal_diff(obs[3], obs[3] * 1.1, obs[3] * 0.1 / 1.96)
   expect_equal(llik_cases_recent_entry(off, targets, bucket_wts), expected)

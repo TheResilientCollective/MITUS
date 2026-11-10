@@ -150,10 +150,10 @@ test_that("calib_llik_terms keeps only the demographic terms without TB", {
   expect_identical(seen$calib_end_year, 2021L)
 })
 
-test_that("weights ending before 2019 are an error", {
-  expect_error(check_weight_years(flat_wts()[as.character(1950:2018)]),
-               "importance weights end in 2018")
-  expect_silent(check_weight_years(flat_wts()))
+test_that("weights ending before the validity check year are an error", {
+  expect_error(check_weight_years(flat_wts()[as.character(1950:2016)]),
+               "checks each simulation's 2017 outputs, but the importance weights end in 2016")
+  expect_silent(check_weight_years(flat_wts()[as.character(1950:2017)]))
 })
 
 test_that("calib_setup reads the globals model_load sets, and needs all of them", {
@@ -302,15 +302,17 @@ test_that("the homeless population term compares the 2010 population", {
   )
 })
 
-# The expected values are what the earlier state likelihood, llikelihood_st,
-# gives for the same parameters and targets.
-test_that("California's calibrated parameters give the state likelihood", {
+# The value without TB terms is what the earlier state likelihood,
+# llikelihood_st, gives for the same parameters and targets. The value with TB
+# terms differs from it only by weighting each 5-year bucket by the mean weight
+# of its years.
+test_that("California's calibrated parameters give the recorded likelihood", {
   skip_on_cran()
   local_model_load("CA")
   optim <- readRDS(system.file("CA", "CA_Optim_all_15_0708.rds", package = "MITUS"))
   par <- optim[which.min(optim[, ncol(optim)]), seq_len(nrow(calib_setup()$ParamInitZ))]
   targets <- ca_targets()
-  expect_equal(calib_llikelihood(par, "CA", targets), -335.3962908092, tolerance = 1e-10)
+  expect_equal(calib_llikelihood(par, "CA", targets), -351.6161192892, tolerance = 1e-10)
   expect_equal(calib_llikelihood(par, "CA", targets, tb = FALSE), -18.8659781051,
                tolerance = 1e-10)
 })

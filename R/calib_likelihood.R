@@ -14,9 +14,9 @@ fixed_usb_trend <- c(ND = -0.1)
 # death over that period.
 pandemic_2020 <- c(Dxt = 0.3707595, Trans = 0.1984619, CaseFat = 1.1158255)
 
-# The latest year the TB and demographic terms compare. The importance weights
-# must reach it.
-last_compared_year <- 2019
+# The year whose outputs decide whether a simulation is valid. The importance
+# weights, and so the simulation, must reach it.
+validity_check_year <- 2017
 
 # The likelihood is set to this value when a parameter set gives an invalid
 # simulation, and to this value less a distance penalty when the likelihood
@@ -116,14 +116,14 @@ calib_llik_terms <- function(p, loc, targets, wts, tb = TRUE, calib_end_year = N
   c(terms, demographic_llik_terms(out, targets, wts))
 }
 
-#' Stop unless the importance weights reach the latest year the terms compare
+#' Stop unless the importance weights reach the simulation's validity check year
 #' @noRd
 check_weight_years <- function(wts) {
   last_weight_year <- max(as.integer(names(wts)))
-  if (last_weight_year < last_compared_year) {
-    stop("The calibration likelihood compares years through ", last_compared_year,
-         ", but the importance weights end in ", last_weight_year,
-         "; call model_load() with last_weight_year of at least ", last_compared_year,
+  if (last_weight_year < validity_check_year) {
+    stop("The calibration checks each simulation's ", validity_check_year,
+         " outputs, but the importance weights end in ", last_weight_year,
+         "; call model_load() with last_weight_year of at least ", validity_check_year,
          call. = FALSE)
   }
 }
@@ -228,8 +228,8 @@ apply_pandemic_2020 <- function(prms) {
 #' @param calib_end_year last simulated year
 #' @return list of the annual outputs \code{out}, with named columns, and the
 #'   model parameters \code{prms}; NULL when the simulation is invalid, meaning
-#'   its 2017 outputs have missing or negative values or its state array
-#'   \code{V1} has negative values
+#'   its outputs in \code{validity_check_year} have missing or negative values or
+#'   its state array \code{V1} has negative values
 #' @noRd
 simulate_calibration <- function(p, loc, calib_end_year) {
   prms <- param_init(p, loc, prg_chng = def_prgchng(p), ttt_list = def_ttt())
@@ -309,7 +309,7 @@ simulate_calibration <- function(p, loc, calib_end_year) {
     dist_gen = prms[["dist_gen"]],
     trans_mat_tot_ages = trans_mat
   )
-  check_year <- run$Outputs[year_to_idx(2017), ]
+  check_year <- run$Outputs[year_to_idx(validity_check_year), ]
   if (any(is.na(check_year)) || min(check_year) < 0 || min(run$V1) < 0) {
     message("Simulation has missing or negative values")
     return(NULL)
