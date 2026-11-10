@@ -84,6 +84,7 @@ test_that("a likelihood that cannot be evaluated gives the distance penalty", {
 summed_llik <- function(par_matrix, n_cores = 1) {
   local_mocked_bindings(
     resolve_calib_end_year = function(calib_end_year) 2019,
+    check_target_horizon = function(targets, wts) NULL,
     calib_setup = function() fake_setup(),
     calib_llikelihood_one = function(par, ...) sum(par)
   )
@@ -104,6 +105,7 @@ test_that("calib_llikelihood needs one value per calibrated parameter", {
 test_that("a parameter set that fails in parallel stops the calibration", {
   local_mocked_bindings(
     resolve_calib_end_year = function(calib_end_year) 2019,
+    check_target_horizon = function(targets, wts) NULL,
     calib_setup = function() fake_setup(),
     calib_llikelihood_one = function(par, ...) if (par[1] > 1) stop("worker failed") else sum(par)
   )
@@ -119,6 +121,7 @@ test_that("calib_llikelihood passes the TB switch and end year to every set", {
   seen <- new.env()
   local_mocked_bindings(
     resolve_calib_end_year = function(calib_end_year) calib_end_year,
+    check_target_horizon = function(targets, wts) NULL,
     calib_setup = function() fake_setup(),
     calib_llik_terms = function(p, loc, targets, wts, tb, calib_end_year) {
       seen$tb <- tb
@@ -195,8 +198,8 @@ test_that("a valid simulation returns named outputs, and only 2017 is checked", 
   expect_identical(unname(sim$out[year_to_idx(2016), 5]), -1)
 })
 
-tb_terms <- function(loc, out = fake_outputs()) {
-  tb_llik_terms(out, fake_progression(), c(rSlfCur = 0.01, muIp = 0.02), loc, ca_targets(),
+tb_terms <- function(loc, out = fake_outputs(), targets = ca_targets()) {
+  tb_llik_terms(out, fake_progression(), c(rSlfCur = 0.01, muIp = 0.02), loc, targets,
                 flat_wts())
 }
 
@@ -226,7 +229,9 @@ test_that("each TB term gets the simulated values it compares", {
   terms <- tb_terms("CA", out)
   nusb_age <- by_age(out, "NOTIF_") + by_age(out, "NOTIF_MORT_") -
     (by_age(out, "NOTIF_US_") + by_age(out, "NOTIF_US_MORT_"))
-  expect_identical(terms[["cases_age_nusb"]], llik_cases_age_5yr(nusb_age, 0, targets, flat_wts()))
+  expect_identical(
+    terms[["cases_age_nusb"]], llik_cases_age_5yr(nusb_age, "nusb", targets, flat_wts())
+  )
   rows <- year_to_idx(2015:2018)
   fraction <- sum(out[rows, c("INCID_REC_US", "INCID_REC_FB")]) /
     sum(out[rows, c("INCID_ALL_US", "INCID_ALL_FB")])
@@ -237,6 +242,34 @@ test_that("each TB term gets the simulated values it compares", {
     llik_ltbi_prev_usb(by_age(out, "N_US_LTBI_")[y2011, ], by_age(out, "N_US_")[y2011, ], targets)
   )
   expect_identical(terms[["tiemersma"]], llik_tiemersma(self_cure = 0.01, mortality = 0.02))
+})
+
+test_that("single-year and fixed-window targets take their years from the targets", {
+  out <- fake_outputs()
+  targets <- ca_targets()
+  moved <- targets
+  est <- moved$estimates
+  est[est$target == "recent_transmission", c("start", "end")] <- c(2012L, 2016L)
+  est[est$target %in% c("ltbi_tx_total", "ltbi_tx_share"), c("start", "end")] <- 2005L
+  est[est$target == "homeless_pop", c("start", "end")] <- 2013L
+  moved$estimates <- est
+  moved$obs[moved$obs$target == "ltbi_prev", c("start", "end")] <- 2014L
+  terms <- tb_terms("CA", out, moved)
+  rows <- year_to_idx(2012:2016)
+  fraction <- sum(out[rows, c("INCID_REC_US", "INCID_REC_FB")]) /
+    sum(out[rows, c("INCID_ALL_US", "INCID_ALL_FB")])
+  expect_identical(terms[["recent_transmission"]], llik_recent_transmission(fraction, moved))
+  y2005 <- year_to_idx(2005)
+  expect_identical(terms[["ltbi_tx_total"]], llik_ltbi_tx_total(out[y2005, "TLTBI_INITS"], moved))
+  y2014 <- year_to_idx(2014)
+  expect_identical(
+    terms[["ltbi_prev_nusb"]],
+    llik_ltbi_prev_nusb(by_age(out, "N_FB_LTBI_")[y2014, ], by_age(out, "N_FB_")[y2014, ], moved)
+  )
+  expect_identical(
+    demographic_llik_terms(out, moved, flat_wts())[["homeless_pop"]],
+    llik_homeless_pop(out[year_to_idx(2013), "N_HR"], moved)
+  )
 })
 
 test_that("North Dakota's US-born case trend target is fixed", {
@@ -270,14 +303,14 @@ test_that("the homeless population term compares the 2010 population", {
 })
 
 # The expected values are what the earlier state likelihood, llikelihood_st,
-# gave for the same parameters.
+# gives for the same parameters and targets.
 test_that("California's calibrated parameters give the state likelihood", {
   skip_on_cran()
   local_model_load("CA")
   optim <- readRDS(system.file("CA", "CA_Optim_all_15_0708.rds", package = "MITUS"))
   par <- optim[which.min(optim[, ncol(optim)]), seq_len(nrow(calib_setup()$ParamInitZ))]
   targets <- ca_targets()
-  expect_equal(calib_llikelihood(par, "CA", targets), -352.4801406337, tolerance = 1e-10)
+  expect_equal(calib_llikelihood(par, "CA", targets), -333.1827438860, tolerance = 1e-10)
   expect_equal(calib_llikelihood(par, "CA", targets, tb = FALSE), -18.8659781051,
                tolerance = 1e-10)
 })

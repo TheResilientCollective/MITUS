@@ -3,9 +3,22 @@
 # Importance weights of 1 for every year from 1950 to 2019.
 flat_wts <- function() stats::setNames(rep(1, 70), 1950:2019)
 
-# California's calibration targets. find_loc_file() warns that it picked the
-# latest of several calibration data files.
-ca_targets <- function() suppressWarnings(calib_targets("CA"))
+# The 10-29-21 all-state calibration data, with its 2015-2019 nativity bucket
+# and its 1999-2003 recent-arrival bucket labelled with the years they cover.
+state_calib_data <- function() {
+  d <- readRDS(system.file("ST", "ST_CalibDat_10-29-21.rds", package = "MITUS"))
+  names(d$cases_nat_st_5yr)[names(d$cases_nat_st_5yr) == "X2015.1019"] <- "X2015.2019"
+  d$rt_fb_cases_sm$yr_txt <- sub("99_13", "99_03", d$rt_fb_cases_sm$yr_txt)
+  d
+}
+
+# All-state all-cause deaths by age.
+state_deaths_by_age <- function() readRDS(system.file("ST", "STdeathbyAge.rds", package = "MITUS"))
+
+# California's calibration targets, from the corrected 10-29-21 data.
+ca_targets <- function() {
+  calib_targets_state(state_calib_data(), state_deaths_by_age(), 5, "California")
+}
 
 # Restore the global environment when the calling test ends: globals created
 # during the test are removed and globals it changed get their old values back.

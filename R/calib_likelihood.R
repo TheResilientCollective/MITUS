@@ -43,6 +43,7 @@ calib_llikelihood <- function(par_matrix, loc, targets, n_cores = 1, tb = TRUE,
   calib_end_year <- resolve_calib_end_year(calib_end_year)
   setup <- calib_setup()
   check_weight_years(setup$wts)
+  check_target_horizon(targets, setup$wts)
   par_matrix <- as.matrix(par_matrix)
   if (ncol(par_matrix) == 1) {
     par_matrix <- t(par_matrix)
@@ -104,6 +105,7 @@ calib_llikelihood_one <- function(par, loc, targets, setup, tb, calib_end_year) 
 #' @noRd
 calib_llik_terms <- function(p, loc, targets, wts, tb = TRUE, calib_end_year = NULL) {
   check_weight_years(wts)
+  check_target_horizon(targets, wts)
   calib_end_year <- resolve_calib_end_year(calib_end_year)
   sim <- simulate_calibration(p, loc, calib_end_year)
   if (is.null(sim)) {
@@ -334,15 +336,16 @@ by_age <- function(out, prefix) out[, paste0(prefix, model_age_groups), drop = F
 #' @return named vector of log-likelihood terms
 #' @noRd
 tb_llik_terms <- function(out, prms, p, loc, targets, wts) {
-  y2002 <- year_to_idx(2002)
-  y2011 <- year_to_idx(2011)
+  ltbi_tx_year <- year_to_idx(target_estimate(targets, "ltbi_tx_total")$start)
+  ltbi_prev_year <- year_to_idx(unique(target_obs(targets, "ltbi_prev")$start))
+  transmission <- target_estimate(targets, "recent_transmission")
   cases <- out[, "NOTIF_ALL"] + out[, "NOTIF_MORT_ALL"]
   cases_usb_age <- by_age(out, "NOTIF_US_") + by_age(out, "NOTIF_US_MORT_")
   cases_nusb_age <- (by_age(out, "NOTIF_") + by_age(out, "NOTIF_MORT_")) - cases_usb_age
   cases_usb <- out[, "NOTIF_US"] + out[, "NOTIF_MORT_US"]
   cases_nusb <- out[, "NOTIF_F1"] + out[, "NOTIF_F2"] +
     (out[, "NOTIF_MORT_F1"] + out[, "NOTIF_MORT_F2"])
-  recent_years <- year_to_idx(2015:2018)
+  recent_years <- year_to_idx(transmission$start:transmission$end)
   recent_transmission <- sum(out[recent_years, c("INCID_REC_US", "INCID_REC_FB")]) /
     sum(out[recent_years, c("INCID_ALL_US", "INCID_ALL_FB")])
   tb_deaths <- by_age(out, "TOTMORT_W_TB_")
@@ -351,10 +354,10 @@ tb_llik_terms <- function(out, prms, p, loc, targets, wts) {
   terms <- c(
     cases_total = llik_cases_total(cases, targets, wts),
     cases_decline = llik_cases_decline(cases, targets, wts),
-    cases_age_usb = llik_cases_age_5yr(cases_usb_age, 1, targets, wts),
-    cases_age_nusb = llik_cases_age_5yr(cases_nusb_age, 0, targets, wts),
-    cases_nusb = llik_cases_nativity_5yr(cases_nusb, 0, targets, wts),
-    cases_usb = llik_cases_nativity_5yr(cases_usb, 1, targets, wts)
+    cases_age_usb = llik_cases_age_5yr(cases_usb_age, "usb", targets, wts),
+    cases_age_nusb = llik_cases_age_5yr(cases_nusb_age, "nusb", targets, wts),
+    cases_nusb = llik_cases_nativity_5yr(cases_nusb, "nusb", targets, wts),
+    cases_usb = llik_cases_nativity_5yr(cases_usb, "usb", targets, wts)
   )
   if (!loc %in% locs_without_nativity_trend) {
     usb_trend <- if (loc %in% names(fixed_usb_trend)) fixed_usb_trend[[loc]] else NA
@@ -375,16 +378,19 @@ tb_llik_terms <- function(out, prms, p, loc, targets, wts) {
     tx_outcomes = llik_tx_outcomes(
       out[, c("TBTX_COMPLT", "TBTX_DISCONT", "TBTX_DIED")], targets, wts
     ),
-    ltbi_tx_total = llik_ltbi_tx_total(out[y2002, "TLTBI_INITS"], targets),
+    ltbi_tx_total = llik_ltbi_tx_total(out[ltbi_tx_year, "TLTBI_INITS"], targets),
     ltbi_tx_dist = llik_ltbi_tx_dist(
-      out[y2002, c("TLTBI_INITS_FB", "TLTBI_INITS_HR")] / out[y2002, "TLTBI_INITS"],
+      out[ltbi_tx_year, c("TLTBI_INITS_FB", "TLTBI_INITS_HR")] /
+        out[ltbi_tx_year, "TLTBI_INITS"],
       targets
     ),
     ltbi_prev_usb = llik_ltbi_prev_usb(
-      by_age(out, "N_US_LTBI_")[y2011, ], by_age(out, "N_US_")[y2011, ], targets
+      by_age(out, "N_US_LTBI_")[ltbi_prev_year, ], by_age(out, "N_US_")[ltbi_prev_year, ],
+      targets
     ),
     ltbi_prev_nusb = llik_ltbi_prev_nusb(
-      by_age(out, "N_FB_LTBI_")[y2011, ], by_age(out, "N_FB_")[y2011, ], targets
+      by_age(out, "N_FB_LTBI_")[ltbi_prev_year, ], by_age(out, "N_FB_")[ltbi_prev_year, ],
+      targets
     ),
     tb_deaths_total = llik_tb_deaths_total(tb_deaths, targets, wts),
     tb_deaths_age = llik_tb_deaths_age(tb_deaths, targets, wts),
@@ -403,11 +409,12 @@ tb_llik_terms <- function(out, prms, p, loc, targets, wts) {
 demographic_llik_terms <- function(out, targets, wts) {
   deaths <- by_age(out, "TOTMORT_")
   mort_groups <- out[, paste0("N_ag_", rep(seq_along(model_age_groups), each = 4), "_M", 1:4)]
+  homeless_year <- year_to_idx(target_estimate(targets, "homeless_pop")$start)
   c(
-    pop_nusb = llik_pop_total(out[, "N_F1"] + out[, "N_F2"], 0, targets, wts),
-    pop_usb = llik_pop_total(out[, "N_US"], 1, targets, wts),
+    pop_nusb = llik_pop_total(out[, "N_F1"] + out[, "N_F2"], "nusb", targets, wts),
+    pop_usb = llik_pop_total(out[, "N_US"], "usb", targets, wts),
     pop_age = llik_pop_age(by_age(out, "N_US_"), by_age(out, "N_FB_"), targets, wts),
-    homeless_pop = llik_homeless_pop(out[year_to_idx(2010), "N_HR"], targets),
+    homeless_pop = llik_homeless_pop(out[homeless_year, "N_HR"], targets),
     deaths_total = llik_deaths_total(deaths, targets, wts),
     deaths_age = llik_deaths_age(deaths, targets, wts),
     mort_dist = llik_mort_dist(mort_groups, wts)
