@@ -310,7 +310,7 @@ test_that("California's calibrated parameters give the state likelihood", {
   optim <- readRDS(system.file("CA", "CA_Optim_all_15_0708.rds", package = "MITUS"))
   par <- optim[which.min(optim[, ncol(optim)]), seq_len(nrow(calib_setup()$ParamInitZ))]
   targets <- ca_targets()
-  expect_equal(calib_llikelihood(par, "CA", targets), -333.1827438860, tolerance = 1e-10)
+  expect_equal(calib_llikelihood(par, "CA", targets), -335.3962908092, tolerance = 1e-10)
   expect_equal(calib_llikelihood(par, "CA", targets, tb = FALSE), -18.8659781051,
                tolerance = 1e-10)
 })

@@ -250,8 +250,14 @@ test_that("calib_targets reads the calibration data file it is given", {
   expect_identical(suppressWarnings(calib_targets("CA", calib_data_file = path)), ca_targets())
 })
 
-test_that("the default state calibration data has buckets that are not contiguous", {
-  expect_error(suppressWarnings(calib_targets("CA")), "cases_homeless periods that overlap")
+test_that("calib_targets builds a state's targets from the default data", {
+  expect_identical(suppressWarnings(calib_targets("CA")), ca_targets())
+})
+
+test_that("the 04-20-22 state calibration data has buckets that are not contiguous", {
+  path <- system.file("ST", "ST_CalibDat_04-20-22.rds", package = "MITUS")
+  expect_error(suppressWarnings(calib_targets("CA", calib_data_file = path)),
+               "cases_homeless periods that overlap")
 })
 
 test_that("calib_targets reads a county's targets from its own files", {
