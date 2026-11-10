@@ -46,6 +46,15 @@ test_that("the 2020 pandemic adjusts diagnosis, transmission and TB mortality", 
   expect_identical(adjusted$rDxt[, 3], adjusted$rDxt[, 1])
 })
 
+test_that("the 2020 pandemic adjustments can be given", {
+  month <- year_month_to_idx(2021, 1)
+  prms <- list(rDxt = matrix(2, year_month_to_idx(2100, 12), 1),
+               NixTrans = rep(1, year_month_to_idx(2100, 12)))
+  adjusted <- apply_pandemic_2020(prms, c(Dxt = 0.5, Trans = 0.25, CaseFat = 2))
+  expect_identical(c(adjusted$rDxt[month, 1], adjusted$NixTrans[month], adjusted$RRmuTBPand[month]),
+                   c(1, 0.75, 2))
+})
+
 test_that("a valid simulation gives the sum of its terms", {
   local_mocked_bindings(calib_llik_terms = function(...) c(a = -1, b = -2))
   expect_identical(calib_llikelihood_one(c(0, 0, 0), "CA", list(), fake_setup(), TRUE, 2019), -3)
@@ -230,8 +239,8 @@ test_that("calibration reduces 2020 immigration as the projections do", {
   })
   simulate_calibration(1, "CA", 2019)
   expect_identical(immig, 0.4232265)
-  expect_identical(unname(pandemic_2020[c("Immig", "Dxt", "Trans", "CaseFat")]),
-                   eval(formals(OutputsZint)$par2020))
+  expect_identical(formals(OutputsZint)$par2020, quote(pandemic_2020))
+  expect_identical(formals(OutputsInt)$par2020, quote(pandemic_2020))
 })
 
 test_that("a valid simulation returns named outputs, and only 2017 is checked", {

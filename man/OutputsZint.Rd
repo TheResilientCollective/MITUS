@@ -23,7 +23,7 @@ OutputsZint(
   prg_chng = def_prgchng(Par[1, ]),
   ttt_list = def_ttt(),
   care_cascade = def_care_cascade(),
-  par2020 = c(0.4232265, 0.3707595, 0.1984619, 1.1158255)
+  par2020 = pandemic_2020
 )
 }
 \arguments{
@@ -59,7 +59,10 @@ OutputsZint(
 
 \item{ttt_list}{list of targeted testing and treatment values}
 
-\item{par2020}{vector of 2020 adjustment parameters}
+\item{par2020}{the 2020 pandemic adjustments: the fractional reductions in
+immigration (Immig), diagnosis (Dxt) and transmission (Trans) from March 2020
+through 2021, and the relative risk of TB death over that period (CaseFat),
+each returning to its February 2020 level over 2022-2023}
 }
 \value{
 results data frame of output

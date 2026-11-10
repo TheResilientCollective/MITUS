@@ -17,7 +17,6 @@ param_init(
   Scen3 = 0,
   prg_chng,
   ttt_list,
-  delay = 0,
   immig = 99
 )
 }

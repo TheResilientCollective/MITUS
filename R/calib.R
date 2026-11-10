@@ -26,29 +26,15 @@ calib<-function(samp_i,
   P[ii] <- Par3
   P <- P
 
-  ### add in the 2020 parameter adjustments
-  par2020 = c(0.4232265, 0.3707595, 0.1984619, 1.1158255)
-  names(par2020) <- c("Immig", "Dxt", "Trans", "CaseFat")
   ### CALL THE DEFAULT CARE CASCADE FOR BELOW
   care_cascade <- def_care_cascade()
 
   prg_chng<-def_prgchng(P)
   prms <-list()
-  prms <- param_init(P, loc, prg_chng = prg_chng, ttt_list = def_ttt(), immig = par2020["Immig"])
-
-  ### ADD IN THE 2020 ADJUSTMENT PARAMETERS; FOR OPTIMS THROUGH 2021 THESE
-  ### WILL NOT HAVE ANY EFFECT, BUT ARE REQUIRED FOR MODEL RUNS
-  prms$rDxt[843:864,]<-prms$rDxt[843:864,] - (prms$rDxt[843:864,]*par2020["Dxt"])
-  prms$NixTrans[843:864]<- (1-par2020["Trans"])
-  # Bring up params to 50% by end of 2022 (smoothly)
-  for (riskgrp in 1:ncol(prms$rDxt)){
-    prms$rDxt[865:888,riskgrp] <- seq(prms$rDxt[864,riskgrp],prms$rDxt[842,riskgrp], length.out=24)
-  }
-  prms$NixTrans[865:888] <- seq(prms$NixTrans[864],prms$NixTrans[842], length.out=24)
-
-  RRmuTBPand <- rep(1,1812)
-  RRmuTBPand[843:888] <-c(rep(par2020["CaseFat"], 22), seq(par2020["CaseFat"], 1, length.out = 24))
-  ### END OF 2020 ADJUSTMENT
+  prms <- param_init(P, loc, prg_chng = prg_chng, ttt_list = def_ttt(),
+                     immig = pandemic_2020[["Immig"]])
+  prms <- apply_pandemic_2020(prms)
+  RRmuTBPand <- prms[["RRmuTBPand"]]
   ### POPULATION DISTRIBUTION REBLANCING FUNCTION
   trans_mat_tot_ages<<-reblncd(mubt = prms$mubt,can_go = can_go,RRmuHR = prms$RRmuHR[2], RRmuRF = prms$RRmuRF, HRdist = HRdist, dist_gen_v=dist_gen_v, adj_fact=prms[["adj_fact"]])
   if(any(trans_mat_tot_ages>1)) print("transition probabilities are too high")

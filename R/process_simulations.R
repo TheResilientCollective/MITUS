@@ -17,13 +17,16 @@
 #'@param Scen3 boolean for scenario 3
 #'@param prg_chng vector of program change values
 #'@param ttt_list list of targeted testing and treatment values
-#'@param par2020 vector of 2020 adjustment parameters
+#'@param par2020 the 2020 pandemic adjustments: the fractional reductions in
+#'  immigration (Immig), diagnosis (Dxt) and transmission (Trans) from March 2020
+#'  through 2021, and the relative risk of TB death over that period (CaseFat),
+#'  each returning to its February 2020 level over 2022-2023
 #'@return results data frame of output
 #'@export
 OutputsZint <-  function(samp_i=1,ParMatrix,loc, output_month = 11, startyr=1950, endyr=2050,
                          Int1=0,Int2=0,Int3=0,Int4=0,Int5=0,Scen1=0,Scen2=0,Scen3=0,
                          prg_chng=def_prgchng(Par[1,]), ttt_list=def_ttt(), care_cascade = def_care_cascade(),
-                         par2020 = c(0.4232265, 0.3707595, 0.1984619, 1.1158255))
+                         par2020 = pandemic_2020)
 {
   if(min(dim(as.data.frame(ParMatrix)))==1) {
     Par1 <- as.numeric(ParMatrix);
@@ -42,23 +45,11 @@ OutputsZint <-  function(samp_i=1,ParMatrix,loc, output_month = 11, startyr=1950
   Scen2 <<- Scen2;
   Scen3 <<- Scen3;
 
-  ### add in the 2020 parameter adjustments
-  names(par2020) <- c("Immig", "Dxt", "Trans", "CaseFat")
-
-  prms <- list()
-  # prms <- param_init(P,loc="MA",prg_chng=def_prgchng(Par[1,]),ttt_list=def_ttt())
-
-  prms <- param_init(P,loc,Int1,Int2,Int3,Int4,Int5,Scen1,Scen2,Scen3,prg_chng,ttt_list, immig = par2020["Immig"])
-  prms$rDxt[843:864,]<-prms$rDxt[843:864,] - (prms$rDxt[843:864,]*par2020["Dxt"])
-  prms$NixTrans[843:864]<- (1-par2020["Trans"])
-  # Bring up params to 50% by end of 2022 (smoothly)
-  for (riskgrp in 1:ncol(prms$rDxt)){
-    prms$rDxt[865:888,riskgrp] <- seq(prms$rDxt[864,riskgrp],prms$rDxt[842,riskgrp], length.out=24)
-  }
-  prms$NixTrans[865:888] <- seq(prms$NixTrans[864],prms$NixTrans[842], length.out=24)
-
-  RRmuTBPand <- rep(1,1812)
-  RRmuTBPand[843:888] <-c(rep(par2020["CaseFat"], 22), seq(par2020["CaseFat"], 1, length.out = 24))
+  names(par2020) <- names(pandemic_2020)
+  prms <- param_init(P, loc, Int1, Int2, Int3, Int4, Int5, Scen1, Scen2, Scen3, prg_chng, ttt_list,
+                     immig = par2020[["Immig"]])
+  prms <- apply_pandemic_2020(prms, par2020)
+  RRmuTBPand <- prms[["RRmuTBPand"]]
   trans_mat_tot_ages<<-reblncd(mubt = prms$mubt,can_go = can_go,RRmuHR = prms$RRmuHR[2], RRmuRF = prms$RRmuRF, HRdist = HRdist, dist_gen_v=dist_gen_v, adj_fact=prms[["adj_fact"]])
   if(any(trans_mat_tot_ages>1)) print("transition probabilities are too high")
 
@@ -110,10 +101,16 @@ OutputsZint <-  function(samp_i=1,ParMatrix,loc, output_month = 11, startyr=1950
 #'@param Scen3 boolean for scenario 3
 #'@param prg_chng vector of program change values
 #'@param ttt_list list of targeted testing and treatment values
-#'@param par2020 vector of 2020 adjustment parameters
+#'@param par2020 the 2020 pandemic adjustments: the fractional reductions in
+#'  immigration (Immig), diagnosis (Dxt) and transmission (Trans) from March 2020
+#'  through 2021, and the relative risk of TB death over that period (CaseFat),
+#'  each returning to its February 2020 level over 2022-2023
 #'@return out outputs
 #'@export
-OutputsInt <- function(loc,ParMatrix, n_cores=1, output_month = 11, startyr=1950,endyr=2050,Int1=0,Int2=0,Int3=0,Int4=0,Int5=0,Scen1=0,Scen2=0,Scen3=0,prg_chng, ttt_list, par2020=c(0.4232265, 0.3707595, 0.1984619, 1.1158255), care_cascade = def_care_cascade()) {
+OutputsInt <- function(loc, ParMatrix, n_cores = 1, output_month = 11, startyr = 1950,
+                       endyr = 2050, Int1 = 0, Int2 = 0, Int3 = 0, Int4 = 0, Int5 = 0,
+                       Scen1 = 0, Scen2 = 0, Scen3 = 0, prg_chng, ttt_list, par2020 = pandemic_2020,
+                       care_cascade = def_care_cascade()) {
   if(min(dim(as.data.frame(ParMatrix)))==1) {
     out <- OutputsZint(samp_i=1,ParMatrix=ParMatrix,loc=loc, output_month = output_month, endyr=endyr,Int1=Int1,Int2=Int2,Int3=Int3,Int4=Int4,Int5=Int5,Scen1=Scen1,Scen2=Scen2,Scen3=Scen3, prg_chng=prg_chng, ttt_list=ttt_list, par2020 = par2020, care_cascade = care_cascade)
   } else {

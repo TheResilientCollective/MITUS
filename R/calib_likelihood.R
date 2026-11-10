@@ -220,17 +220,19 @@ calib_params <- function(par, setup) {
 #' linearly to 1 over 2022-2023.
 #'
 #' @param prms model parameters from \code{param_init}, with monthly series
+#' @param adjustments named adjustments \code{Dxt}, \code{Trans} and
+#'   \code{CaseFat}, as in \code{pandemic_2020}
 #' @return \code{prms} with adjusted \code{rDxt} and \code{NixTrans}, and
 #'   \code{RRmuTBPand} added
 #' @noRd
-apply_pandemic_2020 <- function(prms) {
+apply_pandemic_2020 <- function(prms, adjustments = pandemic_2020) {
   lockdown <- year_month_to_idx(2020, 3):year_month_to_idx(2021, 12)
   recovery <- year_month_to_idx(2022, 1):year_month_to_idx(2023, 12)
   pre_pandemic <- year_month_to_idx(2020, 2)
   last_lockdown <- year_month_to_idx(2021, 12)
   prms$rDxt[lockdown, ] <- prms$rDxt[lockdown, ] -
-    prms$rDxt[lockdown, ] * pandemic_2020[["Dxt"]]
-  prms$NixTrans[lockdown] <- 1 - pandemic_2020[["Trans"]]
+    prms$rDxt[lockdown, ] * adjustments[["Dxt"]]
+  prms$NixTrans[lockdown] <- 1 - adjustments[["Trans"]]
   for (group in seq_len(ncol(prms$rDxt))) {
     prms$rDxt[recovery, group] <- seq(
       prms$rDxt[last_lockdown, group], prms$rDxt[pre_pandemic, group],
@@ -243,8 +245,8 @@ apply_pandemic_2020 <- function(prms) {
   )
   rr_mu <- rep(1, year_month_to_idx(2100, 12))
   rr_mu[c(lockdown, recovery)] <- c(
-    rep(pandemic_2020[["CaseFat"]], length(lockdown)),
-    seq(pandemic_2020[["CaseFat"]], 1, length.out = length(recovery))
+    rep(adjustments[["CaseFat"]], length(lockdown)),
+    seq(adjustments[["CaseFat"]], 1, length.out = length(recovery))
   )
   prms$RRmuTBPand <- rr_mu
   prms

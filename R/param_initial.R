@@ -20,7 +20,8 @@
 #'@param ttt_list list of ttt changes
 #'@return InputParams list
 #'@export
-param_init <- function(PV,loc,Int1=0,Int2=0,Int3=0,Int4=0,Int5=0,Scen1=0,Scen2=0,Scen3=0,prg_chng, ttt_list,delay=0, immig=99){
+param_init <- function(PV, loc, Int1 = 0, Int2 = 0, Int3 = 0, Int4 = 0, Int5 = 0, Scen1 = 0,
+                       Scen2 = 0, Scen3 = 0, prg_chng, ttt_list, immig = 99) {
   ################################################################################
   ##### DEFINE VARIABLES THAT WILL DETERMINE HOW LONG THE TIME               #####
   ##### DEPENDENT VARIABLES SHOULD BE                                        #####
@@ -80,15 +81,6 @@ param_init <- function(PV,loc,Int1=0,Int2=0,Int3=0,Int4=0,Int5=0,Scen1=0,Scen2=0
     ImmigInputs$PrevTrend25_34[year_to_idx(2010):year_to_idx(2020)]<-seq(from=ImmigInputs$PrevTrend25_34[year_to_idx(2010)],
                                            to=ImmigInputs$PrevTrend25_34[year_to_idx(2010)]*2,
                                            length.out=11)
-  }
-  ##### Adjust immigration for the states with increasing TB trends          #####
-  if (loc != "US") {
-  av_immig <- mean(ImmigInputs$TotByYear[year_to_idx(2000):year_to_idx(2018)])
-  ImmigInputs$TotByYear[year_to_idx(2019):year_to_idx(2020)]<-c(((ImmigInputs$TotByYear[year_to_idx(2018)]+av_immig)/2), av_immig)
-  for (i in year_to_idx(2021):year_to_idx(2100)){
-    ImmigInputs$TotByYear[i]<-ImmigInputs$TotByYear[i-1]*1.005
-  }
-  # Inputs$ImmigInputs <<- ImmigInputs
   }
   ################################################################################
   TxInputs         <- Inputs[["TxInputs"]]
@@ -578,11 +570,6 @@ param_init <- function(PV,loc,Int1=0,Int2=0,Int3=0,Int4=0,Int5=0,Scen1=0,Scen2=0
 
   ######################           PROVIDER DELAY         ########################
   DelaySp    <- rep(PV["DelaySp"],month)
-
-  #add in a temporary change to provider delay
-  if (delay == 1){
-    DelaySp[year_month_to_idx(2020,1):year_month_to_idx(2021,7)]<-8*DelaySp[year_month_to_idx(2020,1):year_month_to_idx(2021,7)]
-  }
 
   if (prg_chng["tb_tim2tx_frc"] !=100){
     DelaySp[prg_m:length(DelaySp)] <- PV["DelaySp"]*(prg_chng["tb_tim2tx_frc"])/100;
