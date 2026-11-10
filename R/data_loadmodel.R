@@ -1,7 +1,10 @@
 #' Load calibration data and inputs for a location
 #'
-#' Reads the location's calibration data, model inputs and parameter files
-#' into the global environment, and sets the importance weights \code{wts}.
+#' Reads the location's model inputs and parameter files into the global
+#' environment, and sets the importance weights \code{wts}. For the US it also
+#' reads the calibration data its likelihood uses, and for a state the all-state
+#' calibration data the state calibration plots use. State and county
+#' calibration reads one location's targets with \code{calib_targets}.
 #'
 #' @name model_load
 #' @param loc location code: \code{"US"}, a state USPS code, or a county code
@@ -48,34 +51,22 @@ if (loc=="US"){
   Opt <<- readRDS(find_loc_file("US","Optim",data_dir=data_dir,required=FALSE))
   Par <<- readRDS(find_loc_file("US","Param",data_dir=data_dir,required=FALSE))
 } else {
-  if (!is.null(loc_info) && loc_info$loc_type == "county") {
-    # County: take country-wide ST CalibDat as base, overlay flat county
-    # data into row st of state-indexed fields. See merge_county_calibdat.
-    base_calibdat <- readRDS(find_loc_file("ST","CalibDat",data_dir=data_dir))
-    overlay_calibdat <- readRDS(find_loc_file(loc,"CalibDat",data_dir=data_dir))
-    CalibDat<<-CalibDatState<<-merge_county_calibdat(base_calibdat,overlay_calibdat,st=loc_info$st)
+  # The all-state calibration targets are read into globals for the state
+  # calibration plots. The calibration itself reads one location's targets with
+  # calib_targets(), so a county gets no target globals, and any left from an
+  # earlier state are removed.
+  target_globals <- c("CalibDat", "CalibDatState", "CalibDatCases", "DeathByAge")
+  is_county <- !is.null(loc_info) && loc_info$loc_type == "county"
+  if (is_county) {
+    rm(list = intersect(target_globals, ls(globalenv())), envir = globalenv())
   } else {
     CalibDat<<-CalibDatState<<-readRDS(find_loc_file(loc,"CalibDat",fallback_loc="ST",data_dir=data_dir))
+    CalibDatCases <<- CalibDat
   }
-  CalibDatCases<<-CalibDat
   ParamInit_st<<-ParamInit<<-readRDS(find_loc_file("ST","ParamInit",fallback_loc=loc,data_dir=data_dir))
   StartVal_st<<-StartVal<<-readRDS(find_loc_file("ST","StartVal",fallback_loc=loc,data_dir=data_dir))
   Inputs<<-readRDS(find_loc_file(loc,"ModelInputs",data_dir=data_dir))
-  # Load DeathByAge data once (used by calibration likelihood functions).
-  # Calibration code indexes DeathByAge[[st]] (state row), so for sub-state
-  # locations we load the country-wide ST list as base and overlay the
-  # county's matrix into slot st (mirrors the CalibDat merge pattern).
-  if (!is.null(loc_info) && loc_info$loc_type == "county") {
-    base_dba_file <- find_loc_file("ST","deathbyAge",data_dir=data_dir,required=FALSE)
-    overlay_dba_file <- find_loc_file(loc,"deathbyAge",data_dir=data_dir,required=FALSE)
-    if (!is.null(base_dba_file)) {
-      base_dba <- readRDS(base_dba_file)
-      if (!is.null(overlay_dba_file)) {
-        base_dba[[loc_info$st]] <- readRDS(overlay_dba_file)
-      }
-      DeathByAge <<- base_dba
-    }
-  } else {
+  if (!is_county) {
     dba_file<-find_loc_file(loc,"deathbyAge",fallback_loc="ST",data_dir=data_dir,required=FALSE)
     if(!is.null(dba_file)){
       DeathByAge <<- readRDS(dba_file)
