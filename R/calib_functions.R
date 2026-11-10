@@ -43,16 +43,6 @@ recent_trans_dist_lLik  <- function(V) {
   (sum(dbeta(rct_trans_dist,V[,1]*100,V[,2]*100,log=T) ) - adj_13)
 }
 
-#' CASES FB DISTRIBUTION 1993-2014
-#' Motivation: dirichlet-multinomial, multinomial data with additional non-sampling biases
-#'@param V table of notifications by fb 1993-2014 (row=22 years, col=fb then us)
-#'@param rho correlation parameter
-#'@return likelihood
-notif_fb_lLik <- function(V,rho=0.01) {
-  notif_fb      <- cbind(CalibDat[["age_cases_fb"]][1:27,12],CalibDat[["age_cases_us"]][1:27,12])/1e6
-  adj_3         <- sum(dDirMult(M=notif_fb,n=notif_fb,Rho=rho)*wts[44:70])
-  (sum(dDirMult(M=V,n=notif_fb,Rho=rho)*wts[44:70]) - adj_3 )*2 }
-
 #'US Cases Age Distribution 1993-2013
 #'Motivation: dirichlet-multinomial data with additional non-sampling biases
 #'@param V table of us notifications by age 1993-2013 (row=21 years, col=11 ages)
@@ -90,16 +80,6 @@ notif_fbus_slp_lLik <- function(V) {
   V2 <- apply(log(V),2,function(x) lm(x~I(1:5))$coef[2])
   sum(dnorm(notif_fbus_slp5,V2,0.01,log=T)) - adj_3a
 }
-
-#' CASES HR DISTRIBUTION 1993-2014
-#' Motivation: dirichlet-multinomial, multinomial data with additional non-sampling biases
-#'@param V table of notifications by hr 1993-2014 (row=22 years, col=pos then neg)
-#'@param rho correlation parameter
-#'@return likelihood
-notif_us_hr_lLik <- function(V,rho=0.05) {
-  notif_us_hr      <- cbind(CalibDat[["us_homeless_cases"]][,2],1-CalibDat[["us_homeless_cases"]][,2])*CalibDat[["us_homeless_cases"]][,3]
-  adj_5b           <- sum(dDirMult(M=notif_us_hr,n=notif_us_hr,Rho=0.005)*wts[44:70])
-  sum(dDirMult(M=V,n=notif_us_hr,Rho=rho)*wts[44:70]) - adj_5b  }
 
 #' CASES HR DISTRIBUTION 1993-2014
 #' Motivation: dirichlet-multinomial, multinomial data with additional non-sampling biases
@@ -267,18 +247,6 @@ tot_pop19_ag_fb_lLik <- function(V,ESS=500) {
   (sum(log(V1[,1]/sum(V1[,1]))*tot_pop19_ag_fb[,1])+sum(log(V1[,2]/sum(V1[,2]))*tot_pop19_ag_fb[,2]))*ESS - adj_18  }
 
 
-#' #' TOTAL POP AGE DISTRIBUTION  NO NATIVITY (ONLY FOR USE IN DEMO MODEL) 1999-2014
-#' #'@param V table of POP by age 2016 (row=16 years, col=11 ages)
-#' #'@param ESS correlation parameter
-#' #'@return likelihood
-tot_pop_age_lLik <- function(V,ESS=500) {
-  tot_pop19_ag  <- CalibDat[["tot_pop19_ag_fb"]][-9,2]/sum(CalibDat[["tot_pop19_ag_fb"]][-9,2]);
-  # data("wonder_pop",package="MITUS")
-  # tot_pop16_ag<-wonder_pop/sum(wonder_pop)
-  adj_18               <- sum(log(tot_pop19_ag)*tot_pop19_ag);
-  sum(log(V[]/sum(V))*tot_pop19_ag[])*ESS - adj_18*ESS
-}
-
 #' #' TOTAL US DEATHS
 #' #' 1970,1975,1980,1985,1990-2007
 #' #' Motivation: norm, mean centered with CI = +/- 5% of mean
@@ -315,24 +283,6 @@ tot_dth_age_lLik <- function(V,rho=0.05) {
   # death_agegrp
   adj_20b        <- sum(dDirMult(M=death_agegrp,n=death_agegrp,Rho=rho)*wts[68:69])
   sum(dDirMult(M=V,n=death_agegrp,Rho=rho)*wts[68:69]) - adj_20b
-}
-
-#' Mortality Risk Group Distribution 1999-2014
-#' Motivation: dirichlet-multinomial, multinomial data with additional non-sampling biases
-#'@param V table of mort_dist 1999-2014 (row=16 years, col=11 ages)
-#'@param rho correlation parameter
-#'@return likelihood
-mort_dist_lLik <- function(V,rho=0.1) {
-  md     <- rowSums(dist_gen)
-  mort_dist     <-matrix(md,2,4, byrow = TRUE)
-  adj_21        <- sum(dDirMult(M=mort_dist+0.1,n=mort_dist,Rho=0.1)*wts[66:67])
-  tot_lik<-0
-  for(ag in 1:11){
-    V1<-V[,(1:4)+4*(ag-1)]
-    x<-sum(dDirMult(M=V1,n=mort_dist,Rho=rho)*wts[66:67]) - adj_21
-    tot_lik<-tot_lik+x
-  }
-  return(tot_lik)
 }
 
 
