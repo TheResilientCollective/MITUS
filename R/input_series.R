@@ -17,22 +17,35 @@ input_series_end_year <- 2100
 # from March 2020.
 legacy_observed_through <- c(mortality = 2016, immigration = 2019)
 
-# Yearly fractional declines that forecast background mortality, one for each
-# age group: 0-4, 5-14, 15-24, ..., 85-94 and 95 and over.
+# ---- Forecast rules ---------------------------------------------------------
+# Every input series is extended from its last observed year through 2100 by the
+# rules below. They are modelling assumptions, not data.
+#
+#   background mortality            declines each year by mortality_declines
+#   immigration volume              grows each year by immigration_growth
+#   immigrant age distribution      holds the last observed year's distribution
+#   births                          hold the last observed value
+#   immigrant TB prevalence trend   declines each year by immigrant_tb_decline
+#   treatment default and quality   hold their last values
+#   aging denominators              hold the value at the end of their smoothed curve
+
+# Yearly fractional declines in background mortality, one for each age group:
+# 0-4, 5-14, 15-24, ..., 85-94 and 95 and over.
 mortality_declines <- c(0.0159, 0.0159, 0.0090, 0.0090, 0.0090, 0.0107, 0.0107,
                         0.0083, 0.0083, 0.0069, 0.0069)
 
-# Yearly fractional decline that forecasts the TB prevalence trend among immigrants.
+# Yearly fractional growth in immigration volume.
+immigration_growth <- 0.005
+
+# Yearly fractional decline in the TB prevalence trend among immigrants.
 immigrant_tb_decline <- 0.015
+# ------------------------------------------------------------------------------
 
 #' Input series for a location
 #'
 #' Builds the location's model inputs as complete series from 1950 to 2100.
-#' Years after an input's last observed year are forecast with fixed rules:
-#' background mortality declines by \code{mortality_declines}, the immigrant TB
-#' prevalence trend declines by \code{immigrant_tb_decline}, treatment default
-#' and quality hold their last values, and the aging denominators hold the value
-#' at the end of their smoothed curve.
+#' Years after an input's last observed year are forecast by the rules at the
+#' top of this file.
 #'
 #' @param loc location code, as given to \code{model_load}
 #' @param inputs the location's model inputs, as \code{model_load} reads them
@@ -63,7 +76,8 @@ immigrant_tb_decline <- 0.015
 build_input_series <- function(loc, inputs) {
   immig <- inputs[["ImmigInputs"]]
   mortality <- location_mortality(loc, inputs[["BgMort"]])
-  immigration <- full_length(annual_values(immig[["TotByYear"]]), "immigration")
+  immigration <- annual_values(immig[["TotByYear"]])
+  births <- annual_values(inputs[["Births"]])
   burden <- annual_values(immig[["TBBurdenImmig"]])
   list(
     loc = loc,
@@ -73,10 +87,10 @@ build_input_series <- function(loc, inputs) {
       immigrant_tb_trend = last_year(burden)
     ),
     init_pop = inputs[["InitPop"]],
-    births = SmoCurve(full_length(annual_values(inputs[["Births"]]), "births")),
+    births = SmoCurve(forecast_births(births)),
     mortality = mortality,
     mortality_monthly = sapply(seq_len(ncol(mortality)), function(i) SmoCurve(mortality[, i])),
-    immigration = immigration,
+    immigration = forecast_immigration(immigration),
     immigration_age_dist = immigration_age_dist(immig[["AgeDist"]]),
     immigrant_tb_trend = immigrant_tb_trend(burden, loc),
     immigrant_tb_rr_age = immig[["RR_Active_TB_Age"]],
@@ -115,18 +129,33 @@ observed_end <- function(x, legacy) {
   if (last_year(x) >= input_series_end_year) legacy else last_year(x)
 }
 
-#' Yearly values through \code{input_series_end_year}, for an input MITUS does
-#' not yet forecast
+#' Yearly values through \code{input_series_end_year}, extending yearly values
+#' named by year by \code{rule}, a function of the last value and the number of
+#' years to add
 #' @noRd
-full_length <- function(x, series) {
-  if (last_year(x) < input_series_end_year) {
-    stop("The ", series, " input ends in ", last_year(x), "; MITUS has no forecast rule for ",
-         series, " yet", call. = FALSE)
+extended <- function(x, rule) {
+  later <- seq_len(input_series_end_year - last_year(x))
+  if (length(later) > 0) {
+    x <- c(x, stats::setNames(rule(x[[length(x)]], length(later)), last_year(x) + later))
   }
   x[as.character(input_series_start_year:input_series_end_year)]
 }
 
-#' Age distribution of immigrants with one column per year, 1950-2100
+#' Yearly immigration volume through 2100, growing by \code{immigration_growth}
+#' after its data
+#' @noRd
+forecast_immigration <- function(immigration) {
+  extended(immigration, function(last, n) last * (1 + immigration_growth)^seq_len(n))
+}
+
+#' Yearly births through 2100, held at the last observed value after their data
+#' @noRd
+forecast_births <- function(births) {
+  extended(births, function(last, n) rep(last, n))
+}
+
+#' Age distribution of immigrants with one column per year, 1950-2100, holding
+#' the last observed year's distribution after its data
 #'
 #' Columns without year names are in the legacy layout, one per year from 1950.
 #' @noRd
@@ -136,11 +165,9 @@ immigration_age_dist <- function(age_dist) {
   } else {
     as.integer(colnames(age_dist))
   }
-  if (max(years) < input_series_end_year) {
-    stop("The immigrant age distribution input ends in ", max(years),
-         "; MITUS has no forecast rule for it yet", call. = FALSE)
-  }
-  age_dist[, match(input_series_start_year:input_series_end_year, years)]
+  columns <- match(input_series_start_year:input_series_end_year, years)
+  columns[is.na(columns)] <- which.max(years)
+  age_dist[, columns]
 }
 
 #' Yearly background mortality rates for a location, 1950-2100

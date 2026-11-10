@@ -32,9 +32,20 @@ location's targets with \code{calib_targets}.
 }
 \details{
 Each input is read by its years and taken as observed through its last
-year, and the input series forecast the years after it. An input that runs
-through 2100 holds its own forecast after its data, so it is taken as
-observed through the year the previous code assumed: 2016 for background
-mortality and 2019 for immigration. The 2020 pandemic immigration reduction
-applies only where immigration is observed through a year before 2020.
+year. The years after it, through 2100, are forecast by fixed rules, all set
+at the top of \code{R/input_series.R}:
+\itemize{
+  \item background mortality declines by a fixed yearly rate for each age group
+  \item immigration volume grows 0.5\% a year
+  \item the immigrant age distribution holds its last observed year
+  \item births hold their last observed value
+  \item the immigrant TB prevalence trend declines 1.5\% a year
+  \item treatment default and quality hold their last values
+  \item the aging denominators hold the end of their smoothed curve
+}
+An input that runs through 2100 holds its own forecast after its data, so it
+is taken as observed through the year the previous code assumed: 2016 for
+background mortality and 2019 for immigration. The 2020 pandemic immigration
+reduction applies only where immigration is observed through a year before
+2020.
 }

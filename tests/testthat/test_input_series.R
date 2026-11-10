@@ -20,14 +20,24 @@ test_that("an input through 2100 is observed through its legacy year", {
   expect_identical(observed_end(annual_values(rep(1, 74)), 2019), 2023L)
 })
 
-test_that("inputs without a forecast rule must run through 2100", {
-  expect_identical(names(full_length(annual_values(rep(1, 151)), "births")),
-                   as.character(1950:2100))
-  expect_error(full_length(annual_values(rep(1, 74)), "births"),
-               "The births input ends in 2023; MITUS has no forecast rule for births yet")
-  expect_error(immigration_age_dist(matrix(1, 11, 74)), "age distribution input ends in 2023")
-  dist <- matrix(seq_len(11 * 151), 11, 151, dimnames = list(NULL, 1950:2100))
-  expect_identical(immigration_age_dist(dist[, 151:1]), dist)
+test_that("immigration grows and births hold after their data", {
+  immigration <- forecast_immigration(annual_values(c(rep(1, 73), 2)))
+  expect_identical(names(immigration), as.character(1950:2100))
+  expect_identical(immigration[["2023"]], 2)
+  expect_equal(immigration[c("2024", "2033")], c(`2024` = 2 * 1.005, `2033` = 2 * 1.005^10))
+  births <- forecast_births(annual_values(c(rep(1, 73), 3)))
+  expect_identical(unname(births[c("2022", "2023", "2024", "2100")]), c(1, 3, 3, 3))
+  full <- annual_values(seq_len(151))
+  expect_identical(forecast_immigration(full), full)
+  expect_identical(forecast_births(full), full)
+})
+
+test_that("the immigrant age distribution holds its last year after its data", {
+  dist <- immigration_age_dist(matrix(c(rep(1, 11 * 73), 2:12), 11, 74))
+  expect_identical(dim(dist), c(11L, 151L))
+  expect_identical(dist[, 151], 2:12 + 0)
+  full <- matrix(seq_len(11 * 151), 11, 151, dimnames = list(NULL, 1950:2100))
+  expect_identical(immigration_age_dist(full[, 151:1]), full)
 })
 
 test_that("national counts are read by year, including a labelled 1959+", {
