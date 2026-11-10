@@ -1,4 +1,8 @@
 calib_noRB<-function(samp_i,ParMatrix, loc){
+  if (loc != "US") {
+    stop("calib_noRB() covers the US only; use calib_fit_for() and plot_calib_fit() for states ",
+         "and counties", call. = FALSE)
+  }
   if(min(dim(as.data.frame(ParMatrix)))==1) {
     Par <- as.numeric(ParMatrix);
     names(Par) <- names(ParMatrix)
@@ -45,9 +49,7 @@ calib_noRB<-function(samp_i,ParMatrix, loc){
   print(v21a)
   pub_list<-list(prms[["Mpfast"]],prms[["Mrslow"]], prms[["rfast"]],prms[["rRecov"]])
   # print(pub_list)
-  if (loc=="US"){
-    calib_graphs(M, pub_list)
-  } else calib_graphs_st(M,loc, pub_list)
+  calib_graphs(M, pub_list)
   return(M)
 }
 

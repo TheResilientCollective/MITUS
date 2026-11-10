@@ -2,9 +2,8 @@
 #'
 #' Reads the location's model inputs and parameter files into the global
 #' environment, and sets the importance weights \code{wts}. For the US it also
-#' reads the calibration data its likelihood uses, and for a state the all-state
-#' calibration data the state calibration plots use. State and county
-#' calibration reads one location's targets with \code{calib_targets}.
+#' reads the calibration data its likelihood uses. State and county calibration
+#' reads one location's targets with \code{calib_targets}.
 #'
 #' @name model_load
 #' @param loc location code: \code{"US"}, a state USPS code, or a county code
@@ -51,27 +50,14 @@ if (loc=="US"){
   Opt <<- readRDS(find_loc_file("US","Optim",data_dir=data_dir,required=FALSE))
   Par <<- readRDS(find_loc_file("US","Param",data_dir=data_dir,required=FALSE))
 } else {
-  # The all-state calibration targets are read into globals for the state
-  # calibration plots. The calibration itself reads one location's targets with
-  # calib_targets(), so a county gets no target globals, and any left from an
-  # earlier state are removed.
-  target_globals <- c("CalibDat", "CalibDatState", "CalibDatCases", "DeathByAge")
-  is_county <- !is.null(loc_info) && loc_info$loc_type == "county"
-  if (is_county) {
-    rm(list = intersect(target_globals, ls(globalenv())), envir = globalenv())
-  } else {
-    CalibDat<<-CalibDatState<<-readRDS(find_loc_file(loc,"CalibDat",fallback_loc="ST",data_dir=data_dir))
-    CalibDatCases <<- CalibDat
-  }
+  # State and county calibration reads one location's targets with
+  # calib_targets(), so any US target globals left from an earlier load are
+  # removed.
+  target_globals <- c("CalibDat", "CalibDatCases")
+  rm(list = intersect(target_globals, ls(globalenv())), envir = globalenv())
   ParamInit_st<<-ParamInit<<-readRDS(find_loc_file("ST","ParamInit",fallback_loc=loc,data_dir=data_dir))
   StartVal_st<<-StartVal<<-readRDS(find_loc_file("ST","StartVal",fallback_loc=loc,data_dir=data_dir))
   Inputs<<-readRDS(find_loc_file(loc,"ModelInputs",data_dir=data_dir))
-  if (!is_county) {
-    dba_file<-find_loc_file(loc,"deathbyAge",fallback_loc="ST",data_dir=data_dir,required=FALSE)
-    if(!is.null(dba_file)){
-      DeathByAge <<- readRDS(dba_file)
-    }
-  }
   par_file<-find_loc_file(loc,"Param",data_dir=data_dir,required=FALSE)
   if(!is.null(par_file)){
     Par <<- readRDS(par_file)
@@ -111,7 +97,7 @@ return(invisible(NULL))
 
 #'loads data for the geography of interest
 #'@name model_load_demo
-#'@param loc two letter postal abbreviation for states; US for national
+#'@param loc \code{"US"}, the only location the demography calibration covers
 #'@return void
 model_load_demo<-function(loc="US"){
   library(mnormt)
@@ -121,33 +107,17 @@ model_load_demo<-function(loc="US"){
   library(MCMCpack)
   library(MASS)
 
-  loc_info <- resolve_location(loc)
-  if (is.null(loc_info) && loc != "US") {
-    stop(paste0("Location '", loc, "' not found in stateID or county_ID.csv"))
+  if (loc != "US") {
+    stop("model_load_demo() covers the US only", call. = FALSE)
   }
 
   #'lazy load necessary datasets
   #'Model Input
-  if (loc=="US"){
-    CalibDat<<-readRDS(find_loc_file("US", "CalibDat"))
-    ParamInit_demo<<-readRDS(find_loc_file("US", "ParamInitdemo"))
-    StartVal_demo<<-readRDS(find_loc_file("US", "StartValdemo"))
-    Inputs<<-readRDS(find_loc_file("US", "Inputs"))
-
-  } else {
-    CalibDat<<-CalibDatState<<-readRDS(find_loc_file(loc, "CalibDat", fallback_loc="ST"))
-    ParamInit_st<<-ParamInit<<-readRDS(find_loc_file("ST", "ParamInit"))
-    StartVal_st<<-StartVal<<-readRDS(find_loc_file("ST", "StartVal"))
-    Inputs<<-readRDS(find_loc_file(loc, "ModelInputs"))
-  }
-
-  if (loc=="US")
-  {
-    wts <<- CalibDat[["ImptWeights"]]
-
-  } else {
-    wts <<- CalibDatState[["ImptWeights"]]
-  }
+  CalibDat <<- readRDS(find_loc_file("US", "CalibDat"))
+  ParamInit_demo <<- readRDS(find_loc_file("US", "ParamInitdemo"))
+  StartVal_demo <<- readRDS(find_loc_file("US", "StartValdemo"))
+  Inputs <<- readRDS(find_loc_file("US", "Inputs"))
+  wts <<- CalibDat[["ImptWeights"]]
   #'creation of background parameters
   #'elements of P will be replaced from either the StartVals in the case
   #'of optimization or the user inputted dataset

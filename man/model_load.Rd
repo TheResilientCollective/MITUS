@@ -26,7 +26,6 @@ NULL, invisibly
 \description{
 Reads the location's model inputs and parameter files into the global
 environment, and sets the importance weights \code{wts}. For the US it also
-reads the calibration data its likelihood uses, and for a state the all-state
-calibration data the state calibration plots use. State and county
-calibration reads one location's targets with \code{calib_targets}.
+reads the calibration data its likelihood uses. State and county calibration
+reads one location's targets with \code{calib_targets}.
 }

@@ -3,10 +3,8 @@
 
 
 update_CalibDat_st<-function(){
-  #load in the model (use CA as example)
-  model_load("ND")
-  #assign old calibdat to a new version
-  newCalibDat<-CalibDat
+  CalibDat <- readRDS(find_loc_file("ST", "CalibDat"))
+  newCalibDat <- CalibDat
   ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
   #### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
   #Total TB cases
@@ -234,8 +232,7 @@ for (i in 1:51){
 #TB deaths by age (use the national level)
 #multiple cause of death in CDC wonder
 ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
-model_load("US")
-NatCalibDat<-CalibDat
+NatCalibDat <- readRDS(find_loc_file("US", "CalibDat"))
 newCalibDat$tbdeaths_age_yr<-NatCalibDat$tb_deaths
 
 ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####

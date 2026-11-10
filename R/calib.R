@@ -3,6 +3,10 @@ calib<-function(samp_i,
                 loc,
                 pdf=TRUE,
                 cex.size=1){
+  if (loc != "US") {
+    stop("calib() covers the US only; use calib_fit_for() and plot_calib_fit() for states ",
+         "and counties", call. = FALSE)
+  }
 
   if(min(dim(as.data.frame(optim_mat)))==1) {
     Par <- as.numeric(optim_mat);
@@ -79,12 +83,14 @@ calib<-function(samp_i,
    print(v21a)
     pub_list<-list(prms[["Mpfast"]],prms[["Mrslow"]], prms[["rfast"]],prms[["rRecov"]])
     # print(pub_list)
-    if (loc=="US"){
     calib_graphs(M, pub_list)
-    } else calib_graphs_st(M,loc, pub_list, pdf=TRUE, cex.size = .7)
     return(M)
 }
 calib_2020<-function(samp_i,optim_mat, loc, pdf=TRUE, cex.size=1){
+  if (loc != "US") {
+    stop("calib_2020() covers the US only; use calib_fit_for() and plot_calib_fit() for states ",
+         "and counties", call. = FALSE)
+  }
 
   if(min(dim(as.data.frame(optim_mat)))==1) {
     Par <- as.numeric(optim_mat);
@@ -159,11 +165,8 @@ calib_2020<-function(samp_i,optim_mat, loc, pdf=TRUE, cex.size=1){
   print(v21a)
   pub_list<-list(prms[["Mpfast"]],prms[["Mrslow"]], prms[["rfast"]],prms[["rRecov"]])
   # print(pub_list)
-  if (loc=="US"){
-    calib_graphs_2020(M, pub_list)
-    future_graphs(M,2049)
-  } else{ calib_graphs_st_2020(M,loc, pdf=TRUE, cex.size = .7)
-  future_graphs_st(loc=loc, df=M, cex.size = .7)}
+  calib_graphs_2020(M, pub_list)
+  future_graphs(M, 2049)
    return(M)
 }
 

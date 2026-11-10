@@ -7,7 +7,7 @@
 model_load_demo(loc = "US")
 }
 \arguments{
-\item{loc}{two letter postal abbreviation for states; US for national}
+\item{loc}{\code{"US"}, the only location the demography calibration covers}
 }
 \value{
 void

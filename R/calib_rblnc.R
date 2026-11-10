@@ -1,5 +1,9 @@
 
 calib_rblnc<-function(samp_i,optim_mat, loc){
+  if (loc != "US") {
+    stop("calib_rblnc() covers the US only; use calib_fit_for() and plot_calib_fit() for states ",
+         "and counties", call. = FALSE)
+  }
   if(min(dim(as.data.frame(optim_mat)))==1) {
     Par <- as.numeric(optim_mat);
     names(Par) <- names(optim_mat)
@@ -59,9 +63,7 @@ calib_rblnc<-function(samp_i,optim_mat, loc){
   print(v21a)
   pub_list<-list(prms[["Mpfast"]],prms[["Mrslow"]], prms[["rfast"]],prms[["rRecov"]])
   # print(pub_list)
-  if (loc=="US"){
-    calib_graphs(M, pub_list)
-  } else calib_graphs_st(M,loc, pub_list)
+  calib_graphs(M, pub_list)
   return(M)
 }
 
