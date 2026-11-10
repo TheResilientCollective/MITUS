@@ -34,7 +34,7 @@ calib<-function(samp_i,
 
   prg_chng<-def_prgchng(P)
   prms <-list()
-  prms <- param_init(P,loc,prg_chng=prg_chng, ttt_list=def_ttt())
+  prms <- param_init(P, loc, prg_chng = prg_chng, ttt_list = def_ttt(), immig = par2020["Immig"])
 
   ### ADD IN THE 2020 ADJUSTMENT PARAMETERS; FOR OPTIMS THROUGH 2021 THESE
   ### WILL NOT HAVE ANY EFFECT, BUT ARE REQUIRED FOR MODEL RUNS

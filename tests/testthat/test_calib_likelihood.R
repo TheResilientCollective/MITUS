@@ -221,6 +221,19 @@ test_that("a simulation with negative or missing 2017 outputs or state is invali
   expect_null(suppressMessages(simulate_calibration(1, "CA", 2019)))
 })
 
+test_that("calibration reduces 2020 immigration as the projections do", {
+  local_simulation()
+  immig <- NULL
+  local_mocked_bindings(param_init = function(..., immig = 99) {
+    immig <<- immig
+    list(RRmuHR = c(1, 1), ResNam = func_ResNam())
+  })
+  simulate_calibration(1, "CA", 2019)
+  expect_identical(immig, 0.4232265)
+  expect_identical(unname(pandemic_2020[c("Immig", "Dxt", "Trans", "CaseFat")]),
+                   eval(formals(OutputsZint)$par2020))
+})
+
 test_that("a valid simulation returns named outputs, and only 2017 is checked", {
   local_simulation(function(out) replace(out, cbind(year_to_idx(2016), 5), -1))
   sim <- simulate_calibration(1, "CA", 2019)

@@ -9,10 +9,11 @@ locs_without_homeless_cases <- c("RI", "ID", "NH", "VT", "WY")
 # Locations whose US-born case trend target is set in place of the data's.
 fixed_usb_trend <- c(ND = -0.1)
 
-# Adjustments for the 2020 pandemic: the fractional reductions in diagnosis and
-# in transmission from March 2020 through 2021, and the relative risk of TB
-# death over that period.
-pandemic_2020 <- c(Dxt = 0.3707595, Trans = 0.1984619, CaseFat = 1.1158255)
+# Adjustments for the 2020 pandemic: the fractional reductions in immigration,
+# diagnosis and transmission from March 2020 through 2021, and the relative risk
+# of TB death over that period. They are the national values the projections in
+# OutputsZint also apply.
+pandemic_2020 <- c(Immig = 0.4232265, Dxt = 0.3707595, Trans = 0.1984619, CaseFat = 1.1158255)
 
 # The year whose outputs decide whether a simulation is valid. The importance
 # weights, and so the simulation, must reach it.
@@ -251,10 +252,11 @@ apply_pandemic_2020 <- function(prms) {
 
 #' Simulate a location for calibration
 #'
-#' Besides the model parameters, the simulation uses the package constants
-#' \code{can_go}, \code{HRdist} and \code{dist_gen_v} to rebalance the
-#' population across risk groups. A message reports any rebalancing transition
-#' probability above 1.
+#' Applies the 2020 pandemic adjustments: \code{param_init} reduces immigration
+#' and \code{apply_pandemic_2020} makes the others. Besides the model
+#' parameters, the simulation uses the package constants \code{can_go},
+#' \code{HRdist} and \code{dist_gen_v} to rebalance the population across risk
+#' groups. A message reports any rebalancing transition probability above 1.
 #'
 #' @param p model parameter vector
 #' @param loc location code
@@ -265,7 +267,8 @@ apply_pandemic_2020 <- function(prms) {
 #'   its state array \code{V1} has negative values
 #' @noRd
 simulate_calibration <- function(p, loc, calib_end_year) {
-  prms <- param_init(p, loc, prg_chng = def_prgchng(p), ttt_list = def_ttt())
+  prms <- param_init(p, loc, prg_chng = def_prgchng(p), ttt_list = def_ttt(),
+                     immig = pandemic_2020[["Immig"]])
   prms <- apply_pandemic_2020(prms)
   trans_mat <- reblncd(
     mubt = prms[["mubt"]], can_go = can_go, RRmuHR = prms[["RRmuHR"]][2],
