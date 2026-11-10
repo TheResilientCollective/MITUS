@@ -44,6 +44,11 @@ param_init(
 \item{prg_chng}{vector of program change values}
 
 \item{ttt_list}{list of ttt changes}
+
+\item{immig}{fractional reduction in immigration from March 2020 through 2021,
+returning to the February 2020 level over 2022-2023; applied only where the
+location's immigration input is forecast from data ending before 2020; 99
+for none}
 }
 \value{
 InputParams list

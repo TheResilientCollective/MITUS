@@ -1,86 +1,79 @@
-#'THE CODE BELOW SOURCES THE MODEL INPUTS AND THEN FORMATS THEM FOR USE
-#'IN THE OUTPUTSINTZ FUNCTION THAT CALLS CSIM FROM THE TB_MODEL.CPP
-#'FUNCTION FILE. ALL VARIABLE NAMES THAT END IN t ARE INDEXED BY TIME
-#'VARIABLE NAMES BEGINNING WITH m ARE MATRICES & V ARE VECTORS.
+# Single years of age, 0 to 110, in each of the model's 11 age groups.
+age_group_rows <- list(1:5, 6:15, 16:25, 26:35, 36:45, 46:55, 56:65, 66:75, 76:85, 86:95, 96:111)
 
-#'@name weight_mort
-#' @param loc two digit mailing abbreviation of state
-#' @return  matrix of denominators 10x1201
+#' Background mortality rates by age group for a location
+#'
+#' For the US, the national death counts over the national population. For a
+#' state or county, the national rates scaled by the location's life table,
+#' over the years the life table covers, weighted by the national population.
+#' For the 5-14 age group the life table's ratios for ages 4-14 are matched to
+#' the national rates for ages 5-14, with age 5 used twice.
+#'
+#' @name weight_mort
+#' @param loc location code
+#' @return matrix of yearly mortality rates, one row per year, named by year,
+#'   and one column per age group
 #' @export
-
-weight_mort<-function(loc){
-  if (loc=="US"){
-    death_age <-readRDS(system.file("US/US_MortalityCountsByAge.rds", package="MITUS"))[,2:69]
-    rownames(death_age)<-readRDS(system.file("US/US_MortalityCountsByAge.rds", package="MITUS"))[,1]
-    death_age<-as.matrix(death_age)
-
-    popdist<- as.matrix(readRDS(system.file("US/US_PopCountsByAge.rds", package="MITUS")))
-    popdist<-popdist[,-1]
-    popdist<-popdist[,-69]
-    rownames(popdist)<-as.matrix(readRDS(system.file("US/US_PopCountsByAge.rds", package="MITUS"))[,1])
-    ##weighted mort for the age groups
-    weight_mort<-matrix(NA,11,68)
-    # colnames(weight_mort)<-colnames(new_mort)
-    weight_mort[1,]<-colSums(death_age[1:5,])/colSums(popdist[1:5,])
-    weight_mort[2,]<-colSums(death_age[6:15,])/colSums(popdist[6:15,])
-    weight_mort[3,]<-colSums(death_age[16:25,])/colSums(popdist[16:25,])
-    weight_mort[4,]<-colSums(death_age[26:35,])/colSums(popdist[26:35,])
-    weight_mort[5,]<-colSums(death_age[36:45,])/colSums(popdist[36:45,])
-    weight_mort[6,]<-colSums(death_age[46:55,])/colSums(popdist[46:55,])
-    weight_mort[7,]<-colSums(death_age[56:65,])/colSums(popdist[56:65,])
-    weight_mort[8,]<-colSums(death_age[66:75,])/colSums(popdist[66:75,])
-    weight_mort[9,]<-colSums(death_age[76:85,])/colSums(popdist[76:85,])
-    weight_mort[10,]<-colSums(death_age[86:95,])/colSums(popdist[86:95,])
-    weight_mort[11,]<-colSums(death_age[96:111,])/colSums(popdist[96:111,])
-
-    weight_mort<-t(weight_mort)
-  } else {
-    # Read the lifetable data. Try a location-specific file first
-    # (supports sub-state locations whose data isn't in the package's
-    # state-indexed list); fall back to ST/ST_SingleYearLifeTable.rds[[st]]
-    # for state-level callers using the canonical packaged data.
-    loc_file <- find_loc_file(loc, "SingleYearLifeTable",
-                              data_dir = get_data_dir(), required = FALSE)
-    if (!is.null(loc_file)) {
-      ST_mortrate <- readRDS(loc_file)[,-1]
-    } else {
-      stateID <- get_stateID()
-      StateID <- as.data.frame(stateID)
-      index <- which(StateID$USPS == loc)
-      ST_mortrate <- readRDS(system.file("ST/ST_SingleYearLifeTable.rds",
-                                         package = "MITUS"))[[index]][,-1]
-    }
-
-    #calculate the crude mortality rates for the US national
-    death_age <-readRDS(system.file("US/US_MortalityCountsByAge.rds", package="MITUS"))[,2:69]
-    rownames(death_age)<-readRDS(system.file("US/US_MortalityCountsByAge.rds", package="MITUS"))[,1]
-    death_age<-as.matrix(death_age)
-
-    popdist<- as.matrix(readRDS(system.file("US/US_PopCountsByAge.rds", package="MITUS")))
-    popdist<-popdist[,-1]
-    popdist<-popdist[,-69]
-    rownames(popdist)<-as.matrix(readRDS(system.file("US/US_PopCountsByAge.rds", package="MITUS"))[,1])
-    nat_mort<-popdist
-    nat_mort<-(death_age/popdist)[,10:67]
-
-    #ratio between state/national
-    ratio<-ST_mortrate/nat_mort
-    #calculate national weighted mort
-    weight_mort<-matrix(NA,11,58)
-    colnames(weight_mort)<-colnames(nat_mort)
-    weight_mort[1,]<-colSums(nat_mort[1:5,]*popdist[1:5,10:67]*ratio[1:5,])/colSums(popdist[1:5,10:67])
-    weight_mort[2,]<-colSums(nat_mort[6:15,]*popdist[6:15,10:67]*ratio[5:15,])/colSums(popdist[6:15,10:67])
-    weight_mort[3,]<-colSums(nat_mort[16:25,]*popdist[16:25,10:67]*ratio[16:25,])/colSums(popdist[16:25,10:67])
-    weight_mort[4,]<-colSums(nat_mort[26:35,]*popdist[26:35,10:67]*ratio[26:35,])/colSums(popdist[26:35,10:67])
-    weight_mort[5,]<-colSums(nat_mort[36:45,]*popdist[36:45,10:67]*ratio[36:45,])/colSums(popdist[36:45,10:67])
-    weight_mort[6,]<-colSums(nat_mort[46:55,]*popdist[46:55,10:67]*ratio[46:55,])/colSums(popdist[46:55,10:67])
-    weight_mort[7,]<-colSums(nat_mort[56:65,]*popdist[56:65,10:67]*ratio[56:65,])/colSums(popdist[56:65,10:67])
-    weight_mort[8,]<-colSums(nat_mort[66:75,]*popdist[66:75,10:67]*ratio[66:75,])/colSums(popdist[66:75,10:67])
-    weight_mort[9,]<-colSums(nat_mort[76:85,]*popdist[76:85,10:67]*ratio[76:85,])/colSums(popdist[76:85,10:67])
-    weight_mort[10,]<-colSums(nat_mort[86:95,]*popdist[86:95,10:67]*ratio[86:95,])/colSums(popdist[86:95,10:67])
-    weight_mort[11,]<-colSums(nat_mort[96:111,]*popdist[96:111,10:67]*ratio[96:111,])/colSums(popdist[96:111,10:67])
-
-    weight_mort<-t(weight_mort)
+weight_mort <- function(loc) {
+  death_age <- national_by_age("US/US_MortalityCountsByAge.rds")
+  popdist <- national_by_age("US/US_PopCountsByAge.rds")
+  years <- intersect(colnames(death_age), colnames(popdist))
+  death_age <- death_age[, years]
+  popdist <- popdist[, years]
+  if (loc == "US") {
+    return(sapply(age_group_rows, function(rows) {
+      colSums(death_age[rows, ]) / colSums(popdist[rows, ])
+    }))
   }
-  return (weight_mort)
+  life_table <- location_life_table(loc)
+  life_years <- colnames(life_table)
+  if (!all(life_years %in% years)) {
+    stop("The life table for ", loc, " covers years without national mortality data",
+         call. = FALSE)
+  }
+  nat_mort <- (death_age / popdist)[, life_years]
+  popdist <- popdist[, life_years]
+  ratio <- life_table / nat_mort
+  ratio_rows <- age_group_rows
+  ratio_rows[[2]] <- 5:15
+  sapply(seq_along(age_group_rows), function(k) {
+    rows <- age_group_rows[[k]]
+    colSums(nat_mort[rows, ] * popdist[rows, ] * ratio[ratio_rows[[k]], ]) /
+      colSums(popdist[rows, ])
+  })
+}
+
+#' Mortality rates by single year of age and year for a state or county
+#'
+#' Read from the location's own life table file if it has one, otherwise from
+#' the all-state life tables.
+#'
+#' @return data frame with one column per year
+#' @noRd
+location_life_table <- function(loc) {
+  loc_file <- find_loc_file(loc, "SingleYearLifeTable", data_dir = get_data_dir(),
+                            required = FALSE)
+  if (!is.null(loc_file)) {
+    return(readRDS(loc_file)[, -1])
+  }
+  index <- which(as.data.frame(get_stateID())$USPS == loc)
+  readRDS(system.file("ST/ST_SingleYearLifeTable.rds", package = "MITUS"))[[index]][, -1]
+}
+
+#' National counts by single year of age, one column per year, from a package
+#' file with an age column followed by yearly columns
+#'
+#' Year columns are read by their leading four digits: the national population
+#' counts label 1959 as "1959+".
+#' @noRd
+national_by_age <- function(file) {
+  table <- readRDS(system.file(file, package = "MITUS"))
+  year_cols <- grep("^[0-9]{4}", colnames(table))
+  years <- substr(colnames(table)[year_cols], 1, 4)
+  if (any(diff(as.integer(years)) != 1)) {
+    stop(file, " must have one column per year", call. = FALSE)
+  }
+  counts <- as.matrix(table[, year_cols])
+  dimnames(counts) <- list(table[, 1], years)
+  counts
 }

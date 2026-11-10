@@ -6,6 +6,13 @@
 #' calibration data its likelihood uses. State and county calibration reads one
 #' location's targets with \code{calib_targets}.
 #'
+#' Each input is read by its years and taken as observed through its last
+#' year, and the input series forecast the years after it. An input that runs
+#' through 2100 holds its own forecast after its data, so it is taken as
+#' observed through the year the previous code assumed: 2016 for background
+#' mortality and 2019 for immigration. The 2020 pandemic immigration reduction
+#' applies only where immigration is observed through a year before 2020.
+#'
 #' @name model_load
 #' @param loc location code: \code{"US"}, a state USPS code, or a county code
 #'   from \code{county_ID.csv}

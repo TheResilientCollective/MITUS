@@ -2,22 +2,21 @@
 % Please edit documentation in R/param_weightedmortality.R
 \name{weight_mort}
 \alias{weight_mort}
-\title{THE CODE BELOW SOURCES THE MODEL INPUTS AND THEN FORMATS THEM FOR USE
-IN THE OUTPUTSINTZ FUNCTION THAT CALLS CSIM FROM THE TB_MODEL.CPP
-FUNCTION FILE. ALL VARIABLE NAMES THAT END IN t ARE INDEXED BY TIME
-VARIABLE NAMES BEGINNING WITH m ARE MATRICES & V ARE VECTORS.}
+\title{Background mortality rates by age group for a location}
 \usage{
 weight_mort(loc)
 }
 \arguments{
-\item{loc}{two digit mailing abbreviation of state}
+\item{loc}{location code}
 }
 \value{
-matrix of denominators 10x1201
+matrix of yearly mortality rates, one row per year, named by year,
+  and one column per age group
 }
 \description{
-THE CODE BELOW SOURCES THE MODEL INPUTS AND THEN FORMATS THEM FOR USE
-IN THE OUTPUTSINTZ FUNCTION THAT CALLS CSIM FROM THE TB_MODEL.CPP
-FUNCTION FILE. ALL VARIABLE NAMES THAT END IN t ARE INDEXED BY TIME
-VARIABLE NAMES BEGINNING WITH m ARE MATRICES & V ARE VECTORS.
+For the US, the national death counts over the national population. For a
+state or county, the national rates scaled by the location's life table,
+over the years the life table covers, weighted by the national population.
+For the 5-14 age group the life table's ratios for ages 4-14 are matched to
+the national rates for ages 5-14, with age 5 used twice.
 }

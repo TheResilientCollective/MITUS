@@ -1,104 +1,72 @@
-#'THE CODE BELOW SOURCES THE MODEL INPUTS AND THEN FORMATS THEM FOR USE
-#'IN THE OUTPUTSINTZ FUNCTION THAT CALLS CSIM FROM THE TB_MODEL.CPP
-#'FUNCTION FILE. ALL VARIABLE NAMES THAT END IN t ARE INDEXED BY TIME
-#'VARIABLE NAMES BEGINNING WITH m ARE MATRICES & V ARE VECTORS.
-
-#'@name age_denom
-#' @param loc two digit mailing abbreviation of state
-#' @param month how long to run the calculation
-#' @return age_den matrix of denominators 10xmonth
+#' Aging denominators by age group
+#'
+#' For each age group but the oldest, the inverse of the share of its
+#' population in its oldest single year of age, smoothed to months and held at
+#' the end of the smoothed curve through \code{month}. The US uses its yearly
+#' national population counts. A state or county uses its census population
+#' counts, which the smoothing spaces ten years apart.
+#'
+#' @name age_denom
+#' @param loc location code
+#' @param month number of months
+#' @return matrix of monthly aging denominators, one row per month and one
+#'   column per age group but the oldest
 #' @export
-
-age_denom<-function(loc, month){
-  if (loc=="US"){
-    #read in the population data that is 1 year age bands by each year 1950-2017
-    popdist<- as.matrix(readRDS(system.file("US/US_PopCountsByAge.rds", package="MITUS")))
-    popdist<-popdist[,-1]
-    rownames(popdist)<-as.matrix(readRDS(system.file("US/US_PopCountsByAge.rds", package="MITUS"))[,1])
-
-    #calculate the percentage of the total age band in each single year age
-    ltd<-matrix(NA,10,69)
-    ltd[1,]<-popdist[5,]/colSums(popdist[1:5,])
-    ltd[2,]<-popdist[15,]/colSums(popdist[6:15,])
-    ltd[3,]<-popdist[25,]/colSums(popdist[16:25,])
-    ltd[4,]<-popdist[35,]/colSums(popdist[26:35,])
-    ltd[5,]<-popdist[45,]/colSums(popdist[36:45,])
-    ltd[6,]<-popdist[55,]/colSums(popdist[46:55,])
-    ltd[7,]<-popdist[65,]/colSums(popdist[56:65,])
-    ltd[8,]<-popdist[75,]/colSums(popdist[66:75,])
-    ltd[9,]<-popdist[85,]/colSums(popdist[76:85,])
-    ltd[10,]<-popdist[95,]/colSums(popdist[86:95,])
-
-    #invert this for the aging rate
-    ltd<-1/ltd
-
-    td<-matrix(NA,10,month)
-    for (i in 1:10){
-      td[i,1:817]<-SmoCurve(as.numeric(ltd[i,]))
-      td[i,818:month]<-td[i,817]
-    }
-
-    age_den<-t(td)*12
+age_denom <- function(loc, month) {
+  if (loc == "US") {
+    popdist <- national_by_age("US/US_PopCountsByAge.rds")
+    smooth <- SmoCurve
   } else {
-    # Read population distribution data. Try a location-specific file
-    # first (supports sub-state locations whose fips isn't in the
-    # packaged ST table); fall back to ST/ST_PopCountsByAge.rds filtered
-    # by fips for state-level callers using the canonical packaged data.
-    loc_file <- find_loc_file(loc, "PopCountsByAge",
-                              data_dir = get_data_dir(), required = FALSE)
-    if (!is.null(loc_file)) {
-      pop <- readRDS(loc_file)
-    } else {
-      stateID <- get_stateID()
-      StateID <- as.data.frame(stateID)
-      index <- which(StateID$USPS == loc)
-      st <- as.numeric(as.matrix(StateID[index, 2]))
-      pop <- readRDS(system.file("ST/ST_PopCountsByAge.rds", package = "MITUS"))
-      pop <- pop[pop$fips == st, ]
+    popdist <- location_census_population(loc)
+    smooth <- SmoCurve_decade_month
+  }
+  ltd <- t(sapply(age_group_rows[1:10], function(rows) {
+    popdist[max(rows), ] / colSums(popdist[rows, ])
+  }))
+  if (loc != "US") {
+    ltd[is.na(ltd)] <- 0
+    ltd[ltd == 0] <- 0.01980337
+  }
+  ltd <- 1 / ltd
+  td <- matrix(NA, 10, month)
+  for (i in 1:10) {
+    smoothed <- smooth(as.numeric(ltd[i, ]))
+    td[i, seq_along(smoothed)] <- smoothed
+    td[i, (length(smoothed) + 1):month] <- smoothed[length(smoothed)]
+  }
+  t(td) * 12
+}
+
+#' Census population by single year of age for a state or county
+#'
+#' Read from the location's own file if it has one, otherwise from the
+#' all-state file. For AK and HI the first census year is estimated by a linear
+#' trend over the later census years.
+#'
+#' @return matrix with one row per single year of age and one column per census
+#'   year
+#' @noRd
+location_census_population <- function(loc) {
+  loc_file <- find_loc_file(loc, "PopCountsByAge", data_dir = get_data_dir(), required = FALSE)
+  if (!is.null(loc_file)) {
+    pop <- readRDS(loc_file)
+  } else {
+    state_id <- as.data.frame(get_stateID())
+    fips <- as.numeric(as.matrix(state_id[which(state_id$USPS == loc), 2]))
+    pop <- readRDS(system.file("ST/ST_PopCountsByAge.rds", package = "MITUS"))
+    pop <- pop[pop$fips == fips, ]
+  }
+  popdist <- pop[, grep("^[0-9]{4}$", colnames(pop))]
+  rownames(popdist) <- pop[, 2]
+  popdist <- as.matrix(popdist)
+  if (loc %in% c("AK", "HI")) {
+    later_years <- rev(as.integer(colnames(popdist)[-1]))
+    for (i in seq_len(nrow(popdist))) {
+      trend <- data.frame(count = rev(popdist[i, -1]), year = later_years)
+      coeff <- stats::lm(count ~ year, data = trend)$coefficients
+      estimate <- round((coeff[2] * as.integer(colnames(popdist)[1])) + coeff[1])
+      popdist[i, 1] <- max(estimate, 0)
     }
-    popdist <- pop[,-(1:3)]
-    rownames(popdist) <- pop[, 2]
-    popdist <- as.matrix(popdist)
-
-    if (loc %in% c("AK","HI")){
-      years<-c(2017,2010,2000,1990,1980,1970,1960)
-      for (i in 1:nrow(popdist)){
-        pop2<-rev(popdist[i,-1])
-        coeff<-lm(pop2~years)$coefficients
-        estim<-round((coeff[2]*1950)+coeff[1])
-        if (estim<0) estim<-0
-        popdist[i,1]<-estim
-      }}
-
-    #calculate the percentage of the total age band in each single year age
-    ltd<-matrix(NA,10,8)
-    ltd[1,]<-popdist[5,]/colSums(popdist[1:5,])
-    ltd[2,]<-popdist[15,]/colSums(popdist[6:15,])
-    ltd[3,]<-popdist[25,]/colSums(popdist[16:25,])
-    ltd[4,]<-popdist[35,]/colSums(popdist[26:35,])
-    ltd[5,]<-popdist[45,]/colSums(popdist[36:45,])
-    ltd[6,]<-popdist[55,]/colSums(popdist[46:55,])
-    ltd[7,]<-popdist[65,]/colSums(popdist[56:65,])
-    ltd[8,]<-popdist[75,]/colSums(popdist[66:75,])
-    ltd[9,]<-popdist[85,]/colSums(popdist[76:85,])
-    ltd[10,]<-popdist[95,]/colSums(popdist[86:95,])
-
-    for (i in 1:length(ltd)) if(is.na(ltd[i])) ltd[i]<-0
-
-
-    for (i in 1:length(ltd)){
-      if (ltd[i]==0){
-        ltd[i]<-0.01980337
-      }}
-    #invert this for the aging rate
-
-    ltd<-1/ltd
-    td<-matrix(NA,10,month)
-    for (i in 1:10){
-      td[i,1:841]<-SmoCurve_decade_month(as.numeric(ltd[i,]))
-      td[i,842:month]<-td[i,841]
-    }
-    age_den<-t(td)*12
-  } #end of else statement
-  return(age_den)
+  }
+  popdist
 }

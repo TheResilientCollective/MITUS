@@ -24,6 +24,10 @@
 #'@param Scen3 boolean for scenario 3
 #'@param prg_chng vector of program change values
 #'@param ttt_list list of ttt changes
+#'@param immig fractional reduction in immigration from March 2020 through 2021,
+#'  returning to the February 2020 level over 2022-2023; applied only where the
+#'  location's immigration input is forecast from data ending before 2020; 99
+#'  for none
 #'@return InputParams list
 #'@export
 param_init <- function(PV, loc, Int1 = 0, Int2 = 0, Int3 = 0, Int4 = 0, Int5 = 0, Scen1 = 0,
@@ -138,7 +142,7 @@ param_init <- function(PV, loc, Int1 = 0, Int2 = 0, Int3 = 0, Int4 = 0, Int5 = 0
   for (j in 1:11){
     TotImmAge[,j]        <- SmoCurve(TotImmAge0[,j])
   }
-  if(immig != 99){
+  if (immig != 99 && immigration_forecast_in_2020(series)) {
     #Hold reduction through December 2021
     TotImmAge[year_month_to_idx(2020,3):year_month_to_idx(2021,12),]<-TotImmAge[year_month_to_idx(2020,3):year_month_to_idx(2021,12),]-(TotImmAge[year_month_to_idx(2020,3):year_month_to_idx(2021,12),]*immig);
     # Bring up immigration to 50% by end of 2022 (smoothly)

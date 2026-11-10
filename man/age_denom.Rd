@@ -2,24 +2,23 @@
 % Please edit documentation in R/param_agingdenominators.R
 \name{age_denom}
 \alias{age_denom}
-\title{THE CODE BELOW SOURCES THE MODEL INPUTS AND THEN FORMATS THEM FOR USE
-IN THE OUTPUTSINTZ FUNCTION THAT CALLS CSIM FROM THE TB_MODEL.CPP
-FUNCTION FILE. ALL VARIABLE NAMES THAT END IN t ARE INDEXED BY TIME
-VARIABLE NAMES BEGINNING WITH m ARE MATRICES & V ARE VECTORS.}
+\title{Aging denominators by age group}
 \usage{
 age_denom(loc, month)
 }
 \arguments{
-\item{loc}{two digit mailing abbreviation of state}
+\item{loc}{location code}
 
-\item{month}{how long to run the calculation}
+\item{month}{number of months}
 }
 \value{
-age_den matrix of denominators 10xmonth
+matrix of monthly aging denominators, one row per month and one
+  column per age group but the oldest
 }
 \description{
-THE CODE BELOW SOURCES THE MODEL INPUTS AND THEN FORMATS THEM FOR USE
-IN THE OUTPUTSINTZ FUNCTION THAT CALLS CSIM FROM THE TB_MODEL.CPP
-FUNCTION FILE. ALL VARIABLE NAMES THAT END IN t ARE INDEXED BY TIME
-VARIABLE NAMES BEGINNING WITH m ARE MATRICES & V ARE VECTORS.
+For each age group but the oldest, the inverse of the share of its
+population in its oldest single year of age, smoothed to months and held at
+the end of the smoothed curve through \code{month}. The US uses its yearly
+national population counts. A state or county uses its census population
+counts, which the smoothing spaces ten years apart.
 }
