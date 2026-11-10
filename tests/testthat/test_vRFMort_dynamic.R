@@ -1,4 +1,5 @@
 test_that("mortality increases over RF level", {
+  local_model_load("US")
   prg_chng<-def_prgchng(P)
   prms <-list()
   prms <- param_init(P,"US",prg_chng=prg_chng, ttt_list=def_ttt())

@@ -1,9 +1,10 @@
 #' Load calibration data and inputs for a location
 #'
 #' Reads the location's model inputs and parameter files into the global
-#' environment, and sets the importance weights \code{wts}. For the US it also
-#' reads the calibration data its likelihood uses. State and county calibration
-#' reads one location's targets with \code{calib_targets}.
+#' environment, builds the location's input series for \code{param_init}, and
+#' sets the importance weights \code{wts}. For the US it also reads the
+#' calibration data its likelihood uses. State and county calibration reads one
+#' location's targets with \code{calib_targets}.
 #'
 #' @name model_load
 #' @param loc location code: \code{"US"}, a state USPS code, or a county code
@@ -91,6 +92,7 @@ if (loc=="US"){
   ParamInit<<-ParamInit_st
 }
   prgchng<<-def_prgchng(P)
+  assign("input_series", build_input_series(loc, Inputs), envir = .mitus_state)
 
 return(invisible(NULL))
 }

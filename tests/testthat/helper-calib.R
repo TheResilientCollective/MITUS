@@ -13,15 +13,19 @@ ca_targets <- function() {
   calib_targets_state(state_calib_data(), state_deaths_by_age(), 5, "California")
 }
 
-# Restore the global environment when the calling test ends: globals created
-# during the test are removed and globals it changed get their old values back.
+# Restore the global environment and the package state when the calling test
+# ends: values created during the test are removed and values it changed get
+# their old values back.
 local_restore_globals <- function(env = parent.frame()) {
-  g <- globalenv()
-  saved <- as.list(g, all.names = TRUE)
+  for (e in list(globalenv(), .mitus_state)) local_restore_env(e, env)
+}
+
+local_restore_env <- function(e, env) {
+  saved <- as.list(e, all.names = TRUE)
   withr::defer(
     {
-      rm(list = setdiff(ls(g, all.names = TRUE), names(saved)), envir = g)
-      list2env(saved, envir = g)
+      rm(list = setdiff(ls(e, all.names = TRUE), names(saved)), envir = e)
+      list2env(saved, envir = e)
     },
     envir = env
   )

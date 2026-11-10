@@ -2,7 +2,7 @@
 % Please edit documentation in R/param_initial.R
 \name{param_init}
 \alias{param_init}
-\title{This function takes the same inputs as the Outputs}
+\title{Model parameters for one parameter set}
 \usage{
 param_init(
   PV,
@@ -21,9 +21,9 @@ param_init(
 )
 }
 \arguments{
-\item{PV}{vector of Inputs to format}
+\item{PV}{model parameter vector}
 
-\item{loc}{two letter abbreviation}
+\item{loc}{location code; the location \code{model_load} loaded}
 
 \item{Int1}{boolean for intervention 1}
 
@@ -49,5 +49,8 @@ param_init(
 InputParams list
 }
 \description{
-This function takes the same inputs as the Outputs
+Applies a parameter set, and any interventions, scenarios, program changes
+and targeted testing, to the input series \code{model_load} built for the
+location, giving the time-varying rates and the other values \code{cSim}
+takes.
 }

@@ -4,10 +4,16 @@
 ##### VARIABLE NAMES BEGINNING WITH m ARE MATRICES & V ARE VECTORS.        #####
 ################################################################################
 
-#' This function takes the same inputs as the Outputs
+#' Model parameters for one parameter set
+#'
+#' Applies a parameter set, and any interventions, scenarios, program changes
+#' and targeted testing, to the input series \code{model_load} built for the
+#' location, giving the time-varying rates and the other values \code{cSim}
+#' takes.
+#'
 #'@name  param_init
-#'@param PV vector of Inputs to format
-#'@param loc two letter abbreviation
+#'@param PV model parameter vector
+#'@param loc location code; the location \code{model_load} loaded
 #'@param Int1 boolean for intervention 1
 #'@param Int2 boolean for intervention 2
 #'@param Int3 boolean for intervention 3
@@ -41,53 +47,13 @@ param_init <- function(PV, loc, Int1 = 0, Int2 = 0, Int3 = 0, Int4 = 0, Int5 = 0
   if(Int5==1) {
     Int1 = Int2 = Int3 = Int4 = 1
   }
-  ################################################################################
-  ###########################          INPUTS            #########################
-  ################################################################################
-  BgMort              <- as.matrix(Inputs[["BgMort"]])
-  if(loc=="US"){
-    BgMort[1:68,2:12] <-weight_mort(loc)
-  } else{
-    BgMort[10:67,2:12]<-weight_mort(loc)
+  series <- input_series()
+  if (!identical(series$loc, loc)) {
+    stop("param_init() for '", loc, "' needs model_load(\"", loc, "\"); '", series$loc,
+         "' is loaded", call. = FALSE)
   }
-  ################################################################################
-  ###SSA projections for reductions in mortality going forward
-  ### these should be calculated and stored as new input data
-  ################################################################################
-  for(j in 68:151){
-    for (i in 1:2){
-      BgMort[j,i]<-BgMort[j-1,i]*(1-.0159)
-    }
-    for (i in 3:5){
-      BgMort[j,i]<-BgMort[j-1,i]*(1-.0090)
-    }
-    for (i in 6:7){
-      BgMort[j,i]<-BgMort[j-1,i]*(1-.0107)
-    }
-    for (i in 8:9){
-      BgMort[j,i]<-BgMort[j-1,i]*(1-.0083)
-    }
-    for (i in 10:11){
-      BgMort[j,i]<-BgMort[j-1,i]*(1-.0069)
-    }
-  }
-  ################################################################################
-  InitPop          <- Inputs[["InitPop"]]
-  Births           <- Inputs[["Births"]]
-  ################################################################################
-  ImmigInputs      <- Inputs[["ImmigInputs"]]
-  ImmigInputs$PrevTrend25_34<-crude_rate(Inputs,loc)
-  if (loc=="ND"){
-    ImmigInputs$PrevTrend25_34[year_to_idx(2010):year_to_idx(2020)]<-seq(from=ImmigInputs$PrevTrend25_34[year_to_idx(2010)],
-                                           to=ImmigInputs$PrevTrend25_34[year_to_idx(2010)]*2,
-                                           length.out=11)
-  }
-  ################################################################################
-  TxInputs         <- Inputs[["TxInputs"]]
-  NetMig           <- Inputs[["NetMigrState"]]
-  ################################################################################
-  ##########                CALCULATION OF AGING DENOMINATORS           ##########
-  spl_den <-age_denom(loc, month)
+  InitPop <- series$init_pop
+  NetMig <- series$net_migration
   ################################################################################
   ##########                PARAMETER DEFINITIONS                      ###########
   ##########                RISK FACTOR DISTRIBUTIONS   ##########################
@@ -98,7 +64,7 @@ param_init <- function(PV, loc, Int1 = 0, Int2 = 0, Int3 = 0, Int4 = 0, Int5 = 0
   #######################           BIRTHS                 #######################
   ####### INDEXED BY TIME, ABSOLUTE NUMBER OF NEW ADULT ENTRANTS OVER TIME #######
 
-  Birthst   <- SmoCurve(Births)*PV["TunBirths"]/12
+  Birthst <- series$births * PV["TunBirths"] / 12
   Birthst   <- Birthst[1:month]
 
   ################################################################################
@@ -107,7 +73,7 @@ param_init <- function(PV, loc, Int1 = 0, Int2 = 0, Int3 = 0, Int4 = 0, Int5 = 0
 
   mubt      <- matrix(NA,month,11)
   for(i in 1:11){
-    mubt[,i] <- SmoCurve(BgMort[,i+1])*PV[["TunMubt"]]/12
+    mubt[, i] <- series$mortality_monthly[, i] * PV[["TunMubt"]] / 12
   }
   mubt<-mubt[1:month,]
   for(i in 1:11){
@@ -157,14 +123,15 @@ param_init <- function(PV, loc, Int1 = 0, Int2 = 0, Int3 = 0, Int4 = 0, Int5 = 0
 
   ######################         IMMIGRATION             ########################
   ######################         OVERALL IMM.            ########################
-  TotImmig0       <- (c(Inputs$ImmigInputs[[1]][year_to_idx(1950):year_to_idx(2100)])+c(rep(0,year_to_idx(2020)),cumsum(rep(PV["ImmigVolFut"],80))))/12*PV["ImmigVol"]
+  immig_growth <- c(rep(0, year_to_idx(2020)), cumsum(rep(PV["ImmigVolFut"], 80)))
+  TotImmig0 <- (c(series$immigration) + immig_growth) / 12 * PV["ImmigVol"]
   if (loc=="ND"){
     TotImmig0[year_to_idx(2010):year_to_idx(2020)]<-seq(from=TotImmig0[year_to_idx(2010)], to=TotImmig0[year_to_idx(2010)]*3, length.out=11)
   }
   TotImmAge0      <-matrix(0,year_to_idx(2100),11)
   for (i in 1:year_to_idx(2100)){
     for (j in 1:11){
-      TotImmAge0[i,j]   <- TotImmig0[i]*as.matrix(ImmigInputs$AgeDist[j,i])
+      TotImmAge0[i, j] <- TotImmig0[i] * as.matrix(series$immigration_age_dist[j, i])
     } }
   TotImmAge <-matrix(0,month,11)
   # for (i in 1:month){
@@ -180,8 +147,12 @@ param_init <- function(PV, loc, Int1 = 0, Int2 = 0, Int3 = 0, Int4 = 0, Int5 = 0
     }
   }
   ######################           LTBI IMM.             ########################
-  PrevTrend25_340l <- c(ImmigInputs[["PrevTrend25_34"]][year_to_idx(1950):year_to_idx(2020)]^(exp(PV["TunLtbiTrend"]))*ImmigInputs[["PrevTrend25_34"]][year_to_idx(2020)]^(1-exp(PV["TunLtbiTrend"])),
-                        ImmigInputs[["PrevTrend25_34"]][year_to_idx(2021):year_to_idx(2100)]*(PV["ImmigPrevFutLat"]/0.99)^(1:80))
+  trend <- series$immigrant_tb_trend
+  PrevTrend25_340l <- c(
+    trend[year_to_idx(1950):year_to_idx(2020)]^(exp(PV["TunLtbiTrend"])) *
+      trend[year_to_idx(2020)]^(1 - exp(PV["TunLtbiTrend"])),
+    trend[year_to_idx(2021):year_to_idx(2100)] * (PV["ImmigPrevFutLat"] / 0.99)^(1:80)
+  )
   PrevTrend25_341l <-   PrevTrend25_340l
   PrevTrend25_34_ls  <- SmoCurve(PrevTrend25_341l)
   PrevTrend25_34_ls <- PrevTrend25_34_ls/PrevTrend25_34_ls[year_month_to_idx(2011, 6)]
@@ -192,13 +163,18 @@ param_init <- function(PV, loc, Int1 = 0, Int2 = 0, Int3 = 0, Int4 = 0, Int5 = 0
   ######################         ACTIVE TB IMM.           ########################
   # PrevTrend25_340a <- c(ImmigInputs[["PrevTrend25_34"]][1:69]^exp(PV["TunActTrend"])*ImmigInputs[["PrevTrend25_34"]][69]^exp((1-PV["TunActTrend"])),
 
-  PrevTrend25_340a <- c(ImmigInputs[["PrevTrend25_34"]][year_to_idx(1950):year_to_idx(2020)]^(exp(PV["TunActTrend"]))*ImmigInputs[["PrevTrend25_34"]][year_to_idx(2020)]^(1-exp(PV["TunActTrend"])),
-                        ImmigInputs[["PrevTrend25_34"]][year_to_idx(2021):year_to_idx(2100)]*(PV["ImmigPrevFutAct"]/0.99)^(1:80))
+  PrevTrend25_340a <- c(
+    trend[year_to_idx(1950):year_to_idx(2020)]^(exp(PV["TunActTrend"])) *
+      trend[year_to_idx(2020)]^(1 - exp(PV["TunActTrend"])),
+    trend[year_to_idx(2021):year_to_idx(2100)] * (PV["ImmigPrevFutAct"] / 0.99)^(1:80)
+  )
 
   PrevTrend25_34a  <- SmoCurve(PrevTrend25_340a)
 
-  ImmAct         <- outer(PrevTrend25_34a*exp(PV["RRtbprev"]),ImmigInputs[["RR_Active_TB_Age"]])*TotImmAge*PV["pImmAct"]
-  ImmFst         <- outer(PrevTrend25_34a*exp(PV["RRtbprev"]),ImmigInputs[["RR_Active_TB_Age"]])*TotImmAge*(1-PV["pImmAct"])
+  ImmAct <- outer(PrevTrend25_34a * exp(PV["RRtbprev"]), series$immigrant_tb_rr_age) *
+    TotImmAge * PV["pImmAct"]
+  ImmFst <- outer(PrevTrend25_34a * exp(PV["RRtbprev"]), series$immigrant_tb_rr_age) *
+    TotImmAge * (1 - PV["pImmAct"])
   ImmNon         <- TotImmAge-ImmAct-ImmFst-ImmLat
   for (i in 1:length(ImmNon)) if (ImmNon[i]<0) ImmNon[i]<-0
 
@@ -632,8 +608,8 @@ param_init <- function(PV, loc, Int1 = 0, Int2 = 0, Int3 = 0, Int4 = 0, Int5 = 0
 
   rDef0         <- rep(NA,year_to_idx(2100))
   rDef0[year_to_idx(1950):year_to_idx(1979)]   <- PV["TxDefEarly"]
-  rDef0[year_to_idx(1993):year_to_idx(2012)]  <- ORAdd(TxInputs[[1]][,2],PV["TunTxDef"])
-  rDef0[year_to_idx(2013):year_to_idx(2100)] <- rDef0[year_to_idx(2012)]
+  rDef0[year_to_idx(as.integer(names(series$tx_default)))] <-
+    ORAdd(series$tx_default, PV["TunTxDef"])
   rDef1         <- predict(smooth.spline(x=c(1950:1979,1993:2100),y=rDef0[-(year_to_idx(1980):year_to_idx(1992))],spar=0.4),x=1950:2100)$y
   rDeft         <- SmoCurve(rDef1)/12;
   rDeft<-rDeft[1:month]
@@ -650,8 +626,8 @@ param_init <- function(PV, loc, Int1 = 0, Int2 = 0, Int3 = 0, Int4 = 0, Int5 = 0
 
   TxQual0         <- rep(NA,year_to_idx(2100))
   TxQual0[year_to_idx(1950):year_to_idx(1979)]   <- PV["TxQualEarly"]
-  TxQual0[year_to_idx(1993):year_to_idx(2011)]  <- ORAdd(TxInputs[[2]][,2],PV["TunTxQual"])
-  TxQual0[year_to_idx(2012):year_to_idx(2100)] <- TxQual0[year_to_idx(2011)]
+  TxQual0[year_to_idx(as.integer(names(series$tx_quality)))] <-
+    ORAdd(series$tx_quality, PV["TunTxQual"])
   TxQual1         <- predict(smooth.spline(x=c(1950:1979,1993:2100),y=TxQual0[-(year_to_idx(1980):year_to_idx(1992))],spar=0.4),x=1950:2100)$y
   TxQualt         <- SmoCurve(TxQual1);
   TxQualt<-TxQualt[1:month]
@@ -683,8 +659,8 @@ param_init <- function(PV, loc, Int1 = 0, Int2 = 0, Int3 = 0, Int4 = 0, Int5 = 0
   ## Tx quality
   TxQual0         <- rep(NA,year_to_idx(2100))
   TxQual0[year_to_idx(1950):year_to_idx(1979)]   <- PV["TxQualEarly"]
-  TxQual0[year_to_idx(1993):year_to_idx(2011)]  <- ORAdd(TxInputs[[2]][,2],PV["TunTxQual"])
-  TxQual0[year_to_idx(2012):year_to_idx(2100)] <- TxQual0[year_to_idx(2011)]
+  TxQual0[year_to_idx(as.integer(names(series$tx_quality)))] <-
+    ORAdd(series$tx_quality, PV["TunTxQual"])
   TxQual1         <- predict(smooth.spline(x=c(1950:1979,1993:2100),y=TxQual0[-(year_to_idx(1980):year_to_idx(1992))],spar=0.4),x=1950:2100)$y
   TxQualt        <- SmoCurve(TxQual1);
   TxQualt         <-TxQualt[1:month]
@@ -777,7 +753,7 @@ param_init <- function(PV, loc, Int1 = 0, Int2 = 0, Int3 = 0, Int4 = 0, Int5 = 0
   InputParams[["EarlyTrend"]]= EarlyTrend
   InputParams[["net_mig_usb"]]  = net_mig_usb
   InputParams[["net_mig_nusb"]]= net_mig_nusb
-  InputParams[["aging_denom"]] <-spl_den
+  InputParams[["aging_denom"]] <- series$aging_denom
   InputParams[["adj_fact"]] <- adj_fact
   InputParams[["NixTrans"]] <- NixTrans
 
