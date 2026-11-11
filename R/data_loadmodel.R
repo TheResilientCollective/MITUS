@@ -25,8 +25,8 @@
 #' 2020.
 #'
 #' @name model_load
-#' @param loc location code: \code{"US"}, a state USPS code, or a county code
-#'   from \code{county_ID.csv}
+#' @param loc location code: \code{"US"}, a state USPS code, or the code of
+#'   another location whose files are in \code{data_dir}
 #' @param data_dir optional external data directory to search before package
 #'   inst/
 #' @param last_weight_year last calendar year covered by the calibration
@@ -44,18 +44,7 @@ model_load <- function(loc = "US", data_dir = NULL, last_weight_year = 2019) {
   library(MCMCpack)
   library(MASS)
 
-  loc_info <- resolve_location(loc)
-  if (is.null(loc_info) && loc != "US") {
-    stop(paste0("Location '", loc, "' not found in stateID or county_ID.csv"))
-  }
-  # Register county locations in stateID so downstream st-based lookups work
-  if (!is.null(loc_info) && loc_info$loc_type == "county") {
-    loc_info$st <- register_location(loc_info)
-  }
-  # Cache data_dir so downstream functions (weight_mort, age_denom, etc.)
-  # called during param_init can locate sub-state input files via
-  # find_loc_file. Cleared (set to NULL) when not provided so a stale
-  # value from a prior model_load call doesn't bleed through.
+  # Store data_dir, or NULL, so a directory from an earlier call is not reused.
   assign("data_dir", data_dir, envir = .mitus_state)
 
 # load necessary datasets

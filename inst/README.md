@@ -28,7 +28,6 @@ Files are named `{loc}_{kind}`, often followed by a date, such as `CA_ModelInput
 | `{loc}/{loc}_Optim_all_*`, `US/US_Optim_all_*` | Calibration results: one parameter set per starting point on the calibration's normal scale, with its negative log posterior in the last column | Calibration results |
 | `{loc}/{loc}_Param_*`, `US/US_Param_*` | Calibrated parameter sets in model units | Parameters for projection |
 | `{loc}/{loc}_results_1`, `US/US_results_1` | Base-case model outputs | Targeted testing and treatment scenarios |
-| `extdata/county_ID.csv` | Locations other than states, with their codes, FIPS codes and states' FIPS codes | Locations |
 
 ## Data for a new location
 A location without a folder here needs a folder named by its location code, `{loc}/`, holding:
@@ -41,10 +40,11 @@ A location without a folder here needs a folder named by its location code, `{lo
 | `{loc}_CalibDat` | Calibration targets, laid out as one state's entry in `ST/ST_CalibDat_*` | Calibrate |
 | `{loc}_deathbyAge` | All-cause deaths by age group and year | Calibrate |
 | `{loc}_Param` | A calibrated parameter set in model units | Project without calibrating |
+| `{loc}_Location` | A list with the location's `name` and `state`, its state's USPS code | Label the location; without it, the name is the location code |
 
 Yearly values in the model input object start in 1950, labelled by year or given one per year. They may end before 2100; the years after their last observation are forecast.
 
-A location that is not a state is also listed in `extdata/county_ID.csv`. Parameter definitions and calibration starting points come from `ST/` unless the folder holds its own `ParamInit` and `StartVal` files.
+Parameter definitions and calibration starting points come from `ST/` unless the folder holds its own `ParamInit` and `StartVal` files.
 
 ## Other files
 Other files in these folders are not used when loading, calibrating or projecting a location. They include:

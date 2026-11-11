@@ -32,7 +32,7 @@ invalid_llik <- -1e12
 #' @param par_matrix parameter sets on the standard normal scale of the
 #'   calibration, one per row; a single set may be a vector or a one-column
 #'   matrix
-#' @param loc state USPS code, or county code from \code{county_ID.csv}
+#' @param loc state USPS code, or the code of another location
 #' @param targets calibration targets for \code{loc}, from \code{calib_targets}
 #' @param n_cores number of parameter sets evaluated in parallel
 #' @param tb whether to include the TB targets, or only the demographic ones

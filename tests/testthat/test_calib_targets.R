@@ -239,9 +239,10 @@ test_that("single years after the last weighted year are allowed", {
   expect_silent(check_target_horizon(targets, flat_wts()))
 })
 
-test_that("calib_targets takes only states and counties", {
+test_that("calib_targets refuses the US and needs a location's own files", {
   expect_error(calib_targets("US"), "takes a state or county code")
-  expect_error(calib_targets("Atlantis"), "takes a state or county code")
+  expect_error(calib_targets("Atlantis", data_dir = withr::local_tempdir()),
+               "Required data file not found: CalibDat for location 'Atlantis'")
 })
 
 test_that("calib_targets reads the calibration data file it is given", {
@@ -278,8 +279,7 @@ test_that("every state's targets are the values its position picks out", {
   calib_dat <- state_calib_data()
   deaths <- state_deaths_by_age()
   state_ids <- get_stateID()
-  # Only the 51 states; a county registered by model_load() follows them
-  for (st in seq_len(51)) {
+  for (st in seq_len(nrow(state_ids))) {
     targets <- calib_targets_state(calib_dat, deaths, st, state_ids[st, 1])
     nativity <- calib_dat$cases_nat_st_5yr
     usb <- nativity[nativity$State.Code == st & nativity$usb == 1, -(1:3)]

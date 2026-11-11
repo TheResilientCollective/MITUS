@@ -95,7 +95,7 @@ bucketed_targets <- c("cases_nativity", "cases_age", "cases_homeless", "cases_re
 #' all-state calibration data. A county's come from its own calibration data,
 #' which may also replace national targets.
 #'
-#' @param loc state USPS code, or county code from \code{county_ID.csv}
+#' @param loc state USPS code, or the code of another location
 #' @param data_dir directory searched for data files before the package's
 #'   \code{inst/}; defaults to the one given to \code{model_load}
 #' @param calib_data_file all-state calibration data file to use in place of
@@ -108,8 +108,8 @@ bucketed_targets <- c("cases_nativity", "cases_age", "cases_homeless", "cases_re
 #'   the published study data every location is calibrated against
 #' @export
 calib_targets <- function(loc, data_dir = get_data_dir(), calib_data_file = NULL) {
-  loc_info <- resolve_location(loc)
-  if (is.null(loc_info) || loc_info$loc_type == "national") {
+  loc_info <- resolve_location(loc, data_dir)
+  if (loc_info$loc_type == "national") {
     stop("calib_targets() takes a state or county code, not '", loc, "'", call. = FALSE)
   }
   all_states <- function(fallback_loc) {

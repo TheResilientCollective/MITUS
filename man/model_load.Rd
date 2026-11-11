@@ -7,8 +7,8 @@
 model_load(loc = "US", data_dir = NULL, last_weight_year = 2019)
 }
 \arguments{
-\item{loc}{location code: \code{"US"}, a state USPS code, or a county code
-from \code{county_ID.csv}}
+\item{loc}{location code: \code{"US"}, a state USPS code, or the code of
+another location whose files are in \code{data_dir}}
 
 \item{data_dir}{optional external data directory to search before package
 inst/}

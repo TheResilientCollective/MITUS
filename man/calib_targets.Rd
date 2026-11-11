@@ -7,7 +7,7 @@
 calib_targets(loc, data_dir = get_data_dir(), calib_data_file = NULL)
 }
 \arguments{
-\item{loc}{state USPS code, or county code from \code{county_ID.csv}}
+\item{loc}{state USPS code, or the code of another location}
 
 \item{data_dir}{directory searched for data files before the package's
 \code{inst/}; defaults to the one given to \code{model_load}}

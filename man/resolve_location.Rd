@@ -2,19 +2,25 @@
 % Please edit documentation in R/location_utils.R
 \name{resolve_location}
 \alias{resolve_location}
-\title{Resolve a location code to its lookup entry}
+\title{Look up a location code}
 \usage{
-resolve_location(loc)
+resolve_location(loc, data_dir = get_data_dir())
 }
 \arguments{
-\item{loc}{Location code (USPS abbreviation, county code, or FIPS)}
+\item{loc}{location code}
+
+\item{data_dir}{directory searched for a county's \code{Location} file before
+the package's \code{inst/}}
 }
 \value{
-List with name, fips, code, loc_type, st. NULL if not found.
+list with \code{name}, \code{code} and \code{loc_type}
+ (\code{"national"}, \code{"state"} or \code{"county"}); for a state also
+ \code{fips} and \code{st}, its row in the state table; for a county also
+ \code{state}, NULL when not given
 }
 \description{
-Checks county_ID.csv first, then stateID, so a county registered in
-stateID by an earlier \code{model_load} still resolves as a county.
-Pure lookup — does not modify global state. Use
-\code{register_location} to add county entries to stateID at runtime.
+Returns the US as national, a USPS code in the state table as a state, and
+any other code as a county. A county's name and state come from its
+optional \code{Location} file, a list with \code{name} and \code{state}, the
+USPS code of its state; without one, its name is its code.
 }

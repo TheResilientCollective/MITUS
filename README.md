@@ -24,7 +24,7 @@ The model uses two kinds of data for each location.
 `inst/README.md` describes the data files and where they are kept.
 
 ## Calibrating a state or county
-`model_load` loads a location's model inputs. A state's inputs are in the package; a county's are read from `data_dir`, and the county must be listed in `county_ID.csv`. `last_weight_year` sets the last year of data the calibration fits.
+`model_load` loads a location's model inputs. A state's inputs are in the package; another location's are read from `data_dir`. `last_weight_year` sets the last year of data the calibration fits.
 
 ```
 model_load("CA")
