@@ -1,25 +1,31 @@
-# Input series for one location: the model inputs as complete series from 1950
-# to 2100, built once per location by model_load. None of them depend on the
-# model parameters; param_init applies the parameters to them.
+# This file builds a location's input series: yearly or monthly values, from
+# 1950 to 2100, for each model input that does not depend on the model
+# parameters.
 #
-# Each input is read by its years. A series is observed through its last year,
-# and the years after it are forecast here. An input that runs through 2100
-# holds its own forecast after its data, so it is taken as observed through the
-# year in legacy_observed_through.
+# build_input_series() takes a location's input object and returns the series.
+# For each input it finds the last observed year and fills every later year by
+# a forecast rule. The forecast rules, set out below, are the only part of this
+# file that produces values not derived from an input.
+#
+# Rules for inputs:
+# - Yearly values are labelled by year, through names or a year column.
+#   Unlabelled yearly values are taken as one per year from 1950.
+# - An input's last observed year is its last year, unless that year is 2100.
+# - An input that reaches 2100 contains its own forecast. Its last observed year
+#   is taken from legacy_observed_through: after that year, mortality is
+#   replaced by the forecast rule, and immigration is used as given. Births and
+#   the immigrant age distribution that reach 2100 are used as given.
 
-# First and last year of the input series.
+# First and last year of every input series.
 input_series_start_year <- 1950
 input_series_end_year <- 2100
 
-# Last observed year of an input that runs through 2100. These are the years the
-# previous code treated as the end of the data: it forecast mortality from 2017,
-# and applied the 2020 pandemic reduction, a correction to forecast immigration,
-# from March 2020.
+# Last observed year of a mortality or immigration input that reaches 2100.
 legacy_observed_through <- c(mortality = 2016, immigration = 2019)
 
 # ---- Forecast rules ---------------------------------------------------------
-# Every input series is extended from its last observed year through 2100 by the
-# rules below. They are modelling assumptions, not data.
+# Each input series is extended from its last observed year through 2100 by
+# one of these rules. They are modelling assumptions, not data.
 #
 #   background mortality            declines each year by mortality_declines
 #   immigration volume              grows each year by immigration_growth
@@ -41,36 +47,41 @@ immigration_growth <- 0.005
 immigrant_tb_decline <- 0.015
 # ------------------------------------------------------------------------------
 
-#' Input series for a location
+#' Build a location's input series
 #'
-#' Builds the location's model inputs as complete series from 1950 to 2100.
-#' Years after an input's last observed year are forecast by the rules at the
-#' top of this file.
+#' Reads each input by its years, finds its last observed year, and fills the
+#' later years through 2100 by the forecast rules at the top of this file.
+#' Mortality and the aging denominators also use the location's life table and
+#' census population, through \code{weight_mort} and \code{age_denom}.
 #'
-#' @param loc location code, as given to \code{model_load}
-#' @param inputs the location's model inputs, as \code{model_load} reads them
+#' @param loc location code; selects the life table, the census population and
+#'   the adjustments made only for ND
+#' @param inputs the location's input object: a list with \code{BgMort},
+#'   \code{InitPop}, \code{Births}, \code{TxInputs}, \code{NetMigrState} and
+#'   \code{ImmigInputs}
 #' @return list of
 #'   \describe{
 #'     \item{loc}{the location code}
-#'     \item{observed_through}{the last observed year of the mortality,
-#'       immigration and immigrant TB prevalence inputs}
-#'     \item{init_pop}{the initial population}
-#'     \item{births}{monthly births, smoothed from the yearly input}
-#'     \item{mortality}{yearly background mortality rates, one row per year
-#'       and one column per age group}
+#'     \item{observed_through}{last observed year of the mortality, immigration
+#'       and immigrant TB prevalence inputs}
+#'     \item{init_pop}{initial population, as given}
+#'     \item{births}{monthly births, smoothed from yearly births through 2100}
+#'     \item{mortality}{yearly background mortality rates, one row per year and
+#'       one column per age group}
 #'     \item{mortality_monthly}{monthly background mortality rates, smoothed
 #'       from \code{mortality}}
-#'     \item{immigration}{yearly immigration volume, in millions, named by year}
+#'     \item{immigration}{yearly immigration volume in millions, named by year}
 #'     \item{immigration_age_dist}{age distribution of immigrants, one column
 #'       per year}
 #'     \item{immigrant_tb_trend}{yearly trend in TB prevalence among
 #'       immigrants, named by year}
-#'     \item{immigrant_tb_rr_age}{relative risk of active TB among immigrants
-#'       by age group}
+#'     \item{immigrant_tb_rr_age}{relative risk of active TB among immigrants by
+#'       age group, as given}
 #'     \item{tx_default, tx_quality}{yearly treatment default and treatment
 #'       quality from 1993, named by year}
 #'     \item{aging_denom}{monthly aging denominators}
-#'     \item{net_migration}{net migration rates by age group and nativity}
+#'     \item{net_migration}{net migration rates by age group and nativity, as
+#'       given}
 #'   }
 #' @noRd
 build_input_series <- function(loc, inputs) {
@@ -101,10 +112,11 @@ build_input_series <- function(loc, inputs) {
   )
 }
 
-#' Yearly values named by year
+#' Label yearly values by year
 #'
-#' An input without year names is in the legacy layout, one value per year from
-#' 1950.
+#' Takes a numeric vector, named by year or unnamed, and returns it as a
+#' numeric vector named by year. Unnamed values are labelled one per year from
+#' 1950. Stops unless the years start in 1950 and run without gaps.
 #' @noRd
 annual_values <- function(x) {
   years <- if (is.null(names(x))) {
@@ -118,20 +130,22 @@ annual_values <- function(x) {
   stats::setNames(as.numeric(x), years)
 }
 
-#' Last year of yearly values named by year
+#' Return the last year of yearly values named by year
 #' @noRd
 last_year <- function(x) as.integer(names(x)[length(x)])
 
-#' Last observed year of yearly values: their last year, or \code{legacy} when
-#' they run through \code{input_series_end_year}
+#' Return the last observed year of yearly values named by year: their last
+#' year, or \code{legacy} if their last year is 2100
 #' @noRd
 observed_end <- function(x, legacy) {
   if (last_year(x) >= input_series_end_year) legacy else last_year(x)
 }
 
-#' Yearly values through \code{input_series_end_year}, extending yearly values
-#' named by year by \code{rule}, a function of the last value and the number of
-#' years to add
+#' Extend yearly values through 2100
+#'
+#' Takes yearly values named by year and a rule, a function of the last value
+#' and the number of years to add that returns the added values. Returns the
+#' values for 1950 to 2100, named by year.
 #' @noRd
 extended <- function(x, rule) {
   later <- seq_len(input_series_end_year - last_year(x))
@@ -141,23 +155,25 @@ extended <- function(x, rule) {
   x[as.character(input_series_start_year:input_series_end_year)]
 }
 
-#' Yearly immigration volume through 2100, growing by \code{immigration_growth}
-#' after its data
+#' Extend yearly immigration volume through 2100, growing it by
+#' \code{immigration_growth} each year after its last year
 #' @noRd
 forecast_immigration <- function(immigration) {
   extended(immigration, function(last, n) last * (1 + immigration_growth)^seq_len(n))
 }
 
-#' Yearly births through 2100, held at the last observed value after their data
+#' Extend yearly births through 2100, holding them at their last value
 #' @noRd
 forecast_births <- function(births) {
   extended(births, function(last, n) rep(last, n))
 }
 
-#' Age distribution of immigrants with one column per year, 1950-2100, holding
-#' the last observed year's distribution after its data
+#' Return the immigrant age distribution with one column per year from 1950 to
+#' 2100
 #'
-#' Columns without year names are in the legacy layout, one per year from 1950.
+#' Takes a matrix with one row per age group and one column per year, labelled
+#' by year or unlabelled from 1950. Years after its last column take the last
+#' column's distribution.
 #' @noRd
 immigration_age_dist <- function(age_dist) {
   years <- if (is.null(colnames(age_dist))) {
@@ -170,16 +186,17 @@ immigration_age_dist <- function(age_dist) {
   age_dist[, columns]
 }
 
-#' Yearly background mortality rates for a location, 1950-2100
+#' Build a location's yearly background mortality rates, 1950 to 2100
 #'
-#' The input's rates, with the years the location's life tables cover replaced
-#' by mortality weighted to the location, and the years after the last observed
-#' year forecast by \code{mortality_declines}.
+#' Takes the input's mortality table, replaces the years covered by
+#' \code{weight_mort(loc)} with its weighted rates, and replaces every year
+#' after the last observed year by \code{forecast_mortality}.
 #'
-#' @param mortality the inputs' mortality table: a year column, then one column
+#' @param loc location code
+#' @param mortality the input's mortality table: a year column, then one column
 #'   per age group
-#' @return rates with one row per year and one column per age group, and the
-#'   last observed year as attribute \code{observed_through}
+#' @return matrix with one row per year from 1950 and one column per age group,
+#'   with the last observed year as attribute \code{observed_through}
 #' @noRd
 location_mortality <- function(loc, mortality) {
   mortality <- as.matrix(mortality)
@@ -199,12 +216,13 @@ location_mortality <- function(loc, mortality) {
   rates
 }
 
-#' Forecast yearly mortality by the fixed \code{mortality_declines}
+#' Forecast yearly mortality by \code{mortality_declines}
 #'
-#' @param mortality mortality rates, one row per year from 1950 and one column
-#'   per age group
-#' @param from first forecast year
-#' @return \code{mortality} with the years from \code{from} replaced
+#' @param mortality matrix with one row per year from 1950 and one column per
+#'   age group
+#' @param from first year to forecast
+#' @return \code{mortality} with each year from \code{from} set to the previous
+#'   year's rates less \code{mortality_declines}
 #' @noRd
 forecast_mortality <- function(mortality, from) {
   for (j in year_to_idx(from):nrow(mortality)) {
@@ -213,12 +231,14 @@ forecast_mortality <- function(mortality, from) {
   mortality
 }
 
-#' Trend in TB prevalence among immigrants, 1950-2100
+#' Build the trend in TB prevalence among immigrants, 1950 to 2100
 #'
-#' The yearly burden as a crude rate, declined by \code{immigrant_tb_decline}
-#' each year after its data; for ND, doubled over 2010-2020.
+#' Converts the yearly TB burden among immigrants to a crude rate, then extends
+#' it by declining \code{immigrant_tb_decline} each year after its last year.
+#' For ND, sets 2010 to 2020 to a line rising from the 2010 value to double it.
 #'
 #' @param burden yearly TB burden among immigrants, named by year
+#' @param loc location code
 #' @return yearly trend, named by year
 #' @noRd
 immigrant_tb_trend <- function(burden, loc) {
@@ -234,8 +254,10 @@ immigrant_tb_trend <- function(burden, loc) {
   trend
 }
 
-#' Yearly values of a table with a year column and a value column, held at
-#' their last value through \code{input_series_end_year}, named by year
+#' Extend a table of yearly values through 2100, holding its last value
+#'
+#' Takes a table with a year column and a value column, and returns its values
+#' from its first year through 2100, named by year.
 #' @noRd
 held_to_end <- function(table) {
   years <- table[, 1]
@@ -244,17 +266,16 @@ held_to_end <- function(table) {
   stats::setNames(c(values, rep(values[length(values)], length(later))), c(years, later))
 }
 
-#' Whether the location's immigration input is forecast from data ending before
-#' 2020, the inputs the 2020 pandemic immigration reduction corrects
+#' Return whether an input series' immigration is forecast in every year from
+#' 2020, that is, observed through a year before 2020
 #' @noRd
 immigration_forecast_in_2020 <- function(series) {
   series$observed_through[["immigration"]] < 2020
 }
 
-#' Input series of the loaded location
+#' Return the input series stored in the package state
 #'
-#' @return the list from \code{build_input_series}, as built by
-#'   \code{model_load}
+#' Stops if no input series is stored.
 #' @noRd
 input_series <- function() {
   if (!exists("input_series", envir = .mitus_state, inherits = FALSE)) {
