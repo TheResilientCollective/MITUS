@@ -15,6 +15,14 @@ This fork of [PPML/MITUS](https://github.com/PPML/MITUS) calibrates the model to
 devtools::install()  # from a clone of this repository
 ```
 
+## Model data
+The model uses two kinds of data for each location.
+
+- **Model inputs** describe the population and its history: mortality, births, immigration, treatment and the initial population. `model_load` turns them into complete series from 1950 to 2100. Values for years the data cover are observations, or estimates derived from them; the years after an input's last observation are forecast by the rules at the top of `R/input_series.R`.
+- **Calibration targets** are the outcomes the model is fitted to: TB cases, TB deaths, population and LTBI prevalence, and published studies of TB natural history. Calibration compares a simulation with them; the simulation does not use them.
+
+`inst/README.md` describes the data files and where they are kept.
+
 ## Calibrating a state or county
 `model_load` loads a location's model inputs. A state's inputs are in the package; a county's are read from `data_dir`, and the county must be listed in `county_ID.csv`. `last_weight_year` sets the last year of data the calibration fits.
 
