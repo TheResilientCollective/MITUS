@@ -3,34 +3,41 @@
 # parameters.
 #
 # build_input_series() takes a location's input object and returns the series.
-# For each input it finds the last observed year and fills every later year by
-# a forecast rule. The forecast rules, set out below, are the only part of this
-# file that produces values not derived from an input.
+# The forecast rules, set out below, are the only part of this file that
+# produces values not derived from an input.
 #
 # Rules for inputs:
 # - Yearly values are labelled by year, through names or a year column.
 #   Unlabelled yearly values are taken as one per year from 1950.
-# - An input's last observed year is its last year, unless that year is 2100.
-# - An input that reaches 2100 contains its own forecast. Its last observed year
-#   is taken from legacy_observed_through: after that year, mortality is
-#   replaced by the forecast rule, and immigration is used as given. Births and
-#   the immigrant age distribution that reach 2100 are used as given.
+# - An input that reaches 2100 is used as given. An input that stops earlier is
+#   used through its last year, and every later year is forecast by the rule
+#   for that input.
+# - Background mortality takes its rates from the location's life table for
+#   the years the life table covers, in place of the input's rates for those
+#   years.
+# - The package's own state and national model input files hold PPML's
+#   forecasts after their data. For these files only, mortality and
+#   immigration are used through the years in legacy_input_through, and later
+#   years are forecast by the rules.
 
 # First and last year of every input series.
 input_series_start_year <- 1950
 input_series_end_year <- 2100
 
-# Last observed year of a mortality or immigration input that reaches 2100.
-legacy_observed_through <- c(mortality = 2016, immigration = 2019)
+# Last year used from the package's own state and national model input files.
+legacy_input_through <- list(
+  state = c(mortality = 2016, immigration = 2019),
+  US = c(mortality = 2016, immigration = 2017)
+)
 
 # ---- Forecast rules ---------------------------------------------------------
-# Each input series is extended from its last observed year through 2100 by
-# one of these rules. They are modelling assumptions, not data.
+# An input that stops before 2100 is extended from its last year through 2100
+# by one of these rules. They are modelling assumptions, not data.
 #
 #   background mortality            declines each year by mortality_declines
 #   immigration volume              grows each year by immigration_growth
-#   immigrant age distribution      holds the last observed year's distribution
-#   births                          hold the last observed value
+#   immigrant age distribution      holds the last year's distribution
+#   births                          hold the last value
 #   immigrant TB prevalence trend   declines each year by immigrant_tb_decline
 #   treatment default and quality   hold their last values
 #   aging denominators              hold the value at the end of their smoothed curve
@@ -49,21 +56,23 @@ immigrant_tb_decline <- 0.015
 
 #' Build a location's input series
 #'
-#' Reads each input by its years, finds its last observed year, and fills the
-#' later years through 2100 by the forecast rules at the top of this file.
-#' Mortality and the aging denominators also use the location's life table and
-#' census population, through \code{weight_mort} and \code{age_denom}.
+#' Reads each input by its years and extends it through 2100 by the rules at
+#' the top of this file. Mortality and the aging denominators also use the
+#' location's life table and census population, through \code{weight_mort} and
+#' \code{age_denom}.
 #'
 #' @param loc location code; selects the life table, the census population and
 #'   the adjustments made only for ND
 #' @param inputs the location's input object: a list with \code{BgMort},
 #'   \code{InitPop}, \code{Births}, \code{TxInputs}, \code{NetMigrState} and
 #'   \code{ImmigInputs}
+#' @param legacy whether \code{inputs} is one of the package's own state and
+#'   national model input files, used through \code{legacy_input_through}
 #' @return list of
 #'   \describe{
 #'     \item{loc}{the location code}
-#'     \item{observed_through}{last observed year of the mortality, immigration
-#'       and immigrant TB prevalence inputs}
+#'     \item{input_through}{the last year taken from the mortality, immigration
+#'       and immigrant TB prevalence inputs; later years are forecast}
 #'     \item{init_pop}{initial population, as given}
 #'     \item{births}{monthly births, smoothed from yearly births through 2100}
 #'     \item{mortality}{yearly background mortality rates, one row per year and
@@ -84,17 +93,18 @@ immigrant_tb_decline <- 0.015
 #'       given}
 #'   }
 #' @noRd
-build_input_series <- function(loc, inputs) {
+build_input_series <- function(loc, inputs, legacy = FALSE) {
+  through <- if (legacy) legacy_input_through[[if (loc == "US") "US" else "state"]]
   immig <- inputs[["ImmigInputs"]]
-  mortality <- location_mortality(loc, inputs[["BgMort"]])
-  immigration <- annual_values(immig[["TotByYear"]])
+  mortality <- location_mortality(loc, inputs[["BgMort"]], through[["mortality"]])
+  immigration <- through_year(annual_values(immig[["TotByYear"]]), through[["immigration"]])
   births <- annual_values(inputs[["Births"]])
   burden <- annual_values(immig[["TBBurdenImmig"]])
   list(
     loc = loc,
-    observed_through = c(
-      mortality = attr(mortality, "observed_through"),
-      immigration = observed_end(immigration, legacy_observed_through[["immigration"]]),
+    input_through = c(
+      mortality = attr(mortality, "input_through"),
+      immigration = last_year(immigration),
       immigrant_tb_trend = last_year(burden)
     ),
     init_pop = inputs[["InitPop"]],
@@ -134,11 +144,11 @@ annual_values <- function(x) {
 #' @noRd
 last_year <- function(x) as.integer(names(x)[length(x)])
 
-#' Return the last observed year of yearly values named by year: their last
-#' year, or \code{legacy} if their last year is 2100
+#' Return yearly values named by year through \code{year}, or all of them when
+#' \code{year} is NULL
 #' @noRd
-observed_end <- function(x, legacy) {
-  if (last_year(x) >= input_series_end_year) legacy else last_year(x)
+through_year <- function(x, year) {
+  if (is.null(year)) x else x[as.integer(names(x)) <= year]
 }
 
 #' Extend yearly values through 2100
@@ -159,7 +169,10 @@ extended <- function(x, rule) {
 #' \code{immigration_growth} each year after its last year
 #' @noRd
 forecast_immigration <- function(immigration) {
-  extended(immigration, function(last, n) last * (1 + immigration_growth)^seq_len(n))
+  extended(immigration, function(last, n) {
+    Reduce(function(prev, year) prev * (1 + immigration_growth), seq_len(n),
+           accumulate = TRUE, init = last)[-1]
+  })
 }
 
 #' Extend yearly births through 2100, holding them at their last value
@@ -188,31 +201,31 @@ immigration_age_dist <- function(age_dist) {
 
 #' Build a location's yearly background mortality rates, 1950 to 2100
 #'
-#' Takes the input's mortality table, replaces the years covered by
-#' \code{weight_mort(loc)} with its weighted rates, and replaces every year
-#' after the last observed year by \code{forecast_mortality}.
+#' Takes the input's mortality table and replaces the years covered by
+#' \code{weight_mort(loc)} with its weighted rates. Uses the result through
+#' \code{through}, or through its last year when \code{through} is NULL, and
+#' forecasts any later years by \code{forecast_mortality}.
 #'
 #' @param loc location code
 #' @param mortality the input's mortality table: a year column, then one column
 #'   per age group
+#' @param through last year to use, or NULL
 #' @return matrix with one row per year from 1950 and one column per age group,
-#'   with the last observed year as attribute \code{observed_through}
+#'   with the last year used as attribute \code{input_through}
 #' @noRd
-location_mortality <- function(loc, mortality) {
+location_mortality <- function(loc, mortality, through = NULL) {
   mortality <- as.matrix(mortality)
-  years <- as.integer(mortality[, 1])
-  rates <- matrix(NA_real_, length(input_series_start_year:input_series_end_year),
-                  ncol(mortality) - 1)
-  rates[match(years, input_series_start_year:input_series_end_year), ] <- mortality[, -1]
+  all_years <- input_series_start_year:input_series_end_year
+  rates <- matrix(NA_real_, length(all_years), ncol(mortality) - 1)
+  rates[match(as.integer(mortality[, 1]), all_years), ] <- mortality[, -1]
   weighted <- weight_mort(loc)
   rates[year_to_idx(as.integer(rownames(weighted))), ] <- weighted
-  observed <- if (max(years) >= input_series_end_year) {
-    legacy_observed_through[["mortality"]]
-  } else {
-    max(years)
+  last <- max(all_years[stats::complete.cases(rates)])
+  if (!is.null(through)) last <- min(last, through)
+  if (last < input_series_end_year) {
+    rates <- forecast_mortality(rates, last + 1)
   }
-  rates <- forecast_mortality(rates, observed + 1)
-  attr(rates, "observed_through") <- observed
+  attr(rates, "input_through") <- last
   rates
 }
 
@@ -267,10 +280,10 @@ held_to_end <- function(table) {
 }
 
 #' Return whether an input series' immigration is forecast in every year from
-#' 2020, that is, observed through a year before 2020
+#' 2020, that is, taken from its input only through a year before 2020
 #' @noRd
 immigration_forecast_in_2020 <- function(series) {
-  series$observed_through[["immigration"]] < 2020
+  series$input_through[["immigration"]] < 2020
 }
 
 #' Return the input series stored in the package state

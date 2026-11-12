@@ -42,7 +42,7 @@ A location without a folder here needs a folder named by its location code, `{lo
 | `{loc}_Param` | A calibrated parameter set in model units | Project without calibrating |
 | `{loc}_Location` | A list with the location's `name` and `state`, its state's USPS code | Label the location; without it, the name is the location code |
 
-Yearly values in the model input object start in 1950, labelled by year or given one per year. They may end before 2100; the years after their last observation are forecast.
+Yearly values in the model input object start in 1950, labelled by year or given one per year. Values that reach 2100 are used as given; values that stop earlier are extended by the forecast rules at the top of `R/input_series.R`.
 
 Parameter definitions and calibration starting points come from `ST/` unless the folder holds its own `ParamInit` and `StartVal` files.
 

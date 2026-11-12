@@ -270,3 +270,13 @@ resolve_location <- function(loc, data_dir = get_data_dir()) {
   list(name = if (is.null(about$name)) loc else about$name, code = loc,
        loc_type = "county", state = about$state)
 }
+
+#' Return whether a file is one of the package's own data files
+#'
+#' @param file path to a file
+#' @return TRUE if \code{file} is in the package's data folders
+#'@noRd
+is_package_file <- function(file) {
+  data_root <- normalizePath(dirname(system.file("ST", package = "MITUS")))
+  startsWith(normalizePath(file), paste0(data_root, .Platform$file.sep))
+}

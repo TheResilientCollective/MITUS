@@ -15,9 +15,11 @@ test_that("yearly inputs are read by their years, or from 1950 without them", {
   expect_error(annual_values(c(`1950` = 1, `1952` = 2)), "must run year by year from 1950")
 })
 
-test_that("an input through 2100 is observed through its legacy year", {
-  expect_identical(observed_end(annual_values(rep(1, 151)), 2019), 2019)
-  expect_identical(observed_end(annual_values(rep(1, 74)), 2019), 2023L)
+test_that("an input is used through a given year, or all of it", {
+  x <- annual_values(rep(1, 151))
+  expect_identical(names(through_year(x, 2019))[c(1, 70)], c("1950", "2019"))
+  expect_length(through_year(x, 2019), 70)
+  expect_identical(through_year(x, NULL), x)
 })
 
 test_that("immigration grows and births hold after their data", {
@@ -68,7 +70,7 @@ test_that("model_load builds the location's input series", {
   local_model_load("CA")
   series <- input_series()
   expect_identical(series$loc, "CA")
-  expect_identical(series$observed_through,
+  expect_identical(series$input_through,
                    c(mortality = 2016, immigration = 2019, immigrant_tb_trend = 2018L))
   expect_identical(nrow(series$mortality), 151L)
   expect_gte(nrow(series$mortality_monthly), year_month_to_idx(2100, 1))
@@ -94,7 +96,33 @@ test_that("the pandemic immigration reduction applies only to forecast immigrati
   month <- year_month_to_idx(2021, 1)
   expect_lt(run(0.5)[month, 5], run(99)[month, 5])
   series <- input_series()
-  series$observed_through[["immigration"]] <- 2023
+  series$input_through[["immigration"]] <- 2023
   assign("input_series", series, envir = .mitus_state)
   expect_identical(run(0.5), run(99))
+})
+
+test_that("mortality through 2100 is used as given beyond the life table years", {
+  local_model_load("CA")
+  file_rates <- as.matrix(Inputs$BgMort)[, -1]
+  given <- location_mortality("CA", Inputs$BgMort)
+  expect_identical(attr(given, "input_through"), 2100L)
+  later <- year_to_idx(2017):151
+  expect_identical(unname(given[later, ]), unname(file_rates[later, ]))
+  legacy <- location_mortality("CA", Inputs$BgMort, through = 2016)
+  expect_identical(attr(legacy, "input_through"), 2016)
+  expect_identical(legacy[year_to_idx(2016), ], given[year_to_idx(2016), ])
+  expect_equal(legacy[year_to_idx(2017), ], given[year_to_idx(2016), ] * (1 - mortality_declines))
+})
+
+test_that("a location's own model input file is used as given", {
+  local_model_load("CA")
+  own <- build_input_series("CA", Inputs, legacy = FALSE)
+  expect_identical(own$input_through,
+                   c(mortality = 2100L, immigration = 2100L, immigrant_tb_trend = 2018L))
+  expect_identical(own$immigration, annual_values(Inputs$ImmigInputs$TotByYear))
+})
+
+test_that("the package's own data files are recognised", {
+  expect_true(is_package_file(system.file("ST", "ST_PopCountsByAge.rds", package = "MITUS")))
+  expect_false(is_package_file(withr::local_tempfile(fileext = ".rds", lines = "")))
 })
