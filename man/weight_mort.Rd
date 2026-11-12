@@ -17,6 +17,6 @@ matrix of yearly mortality rates, one row per year, named by year,
 For the US, the national death counts over the national population. For a
 state or county, the national rates scaled by the location's life table,
 over the years the life table covers, weighted by the national population.
-For the 5-14 age group the life table's ratios for ages 4-14 are matched to
-the national rates for ages 5-14, with age 5 used twice.
+Each single year of age is scaled by the ratio of the life table's rate to
+the national rate at that age.
 }

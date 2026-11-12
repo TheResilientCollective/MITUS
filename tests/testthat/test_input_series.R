@@ -49,6 +49,17 @@ test_that("national counts are read by year, including a labelled 1959+", {
   expect_identical(colnames(deaths)[ncol(deaths)], "2017")
 })
 
+test_that("a state's weighted mortality averages its life table over the national population", {
+  life_table <- as.matrix(location_life_table("CA"))
+  popdist <- national_by_age("US/US_PopCountsByAge.rds")[, colnames(life_table)]
+  weighted <- weight_mort("CA")
+  for (k in seq_along(age_group_rows)) {
+    rows <- age_group_rows[[k]]
+    expect_equal(weighted[, k],
+                 colSums(life_table[rows, ] * popdist[rows, ]) / colSums(popdist[rows, ]))
+  }
+})
+
 test_that("treatment inputs hold their last value, named by year", {
   held <- held_to_end(cbind(1993:1995, c(0.1, 0.2, 0.3)))
   expect_identical(names(held), as.character(1993:2100))

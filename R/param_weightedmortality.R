@@ -6,8 +6,8 @@ age_group_rows <- list(1:5, 6:15, 16:25, 26:35, 36:45, 46:55, 56:65, 66:75, 76:8
 #' For the US, the national death counts over the national population. For a
 #' state or county, the national rates scaled by the location's life table,
 #' over the years the life table covers, weighted by the national population.
-#' For the 5-14 age group the life table's ratios for ages 4-14 are matched to
-#' the national rates for ages 5-14, with age 5 used twice.
+#' Each single year of age is scaled by the ratio of the life table's rate to
+#' the national rate at that age.
 #'
 #' @name weight_mort
 #' @param loc location code
@@ -34,12 +34,8 @@ weight_mort <- function(loc) {
   nat_mort <- (death_age / popdist)[, life_years]
   popdist <- popdist[, life_years]
   ratio <- life_table / nat_mort
-  ratio_rows <- age_group_rows
-  ratio_rows[[2]] <- 5:15
-  sapply(seq_along(age_group_rows), function(k) {
-    rows <- age_group_rows[[k]]
-    colSums(nat_mort[rows, ] * popdist[rows, ] * ratio[ratio_rows[[k]], ]) /
-      colSums(popdist[rows, ])
+  sapply(age_group_rows, function(rows) {
+    colSums(nat_mort[rows, ] * popdist[rows, ] * ratio[rows, ]) / colSums(popdist[rows, ])
   })
 }
 
