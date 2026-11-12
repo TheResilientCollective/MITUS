@@ -14,9 +14,8 @@ matrix of yearly mortality rates, one row per year, named by year,
   and one column per age group
 }
 \description{
-For the US, the national death counts over the national population. For a
-state or county, the national rates scaled by the location's life table,
-over the years the life table covers, weighted by the national population.
-Each single year of age is scaled by the ratio of the life table's rate to
-the national rate at that age.
+For the US, the national death counts over the national population in each
+age group. For a state or county, the location's life table rates averaged
+over the single years of age in each age group, weighted by the national
+population at each age, for the years the life table covers.
 }

@@ -19,7 +19,7 @@ Files are named `{loc}_{kind}`, often followed by a date, such as `CA_ModelInput
 | `{loc}/{loc}_ModelInputs_*`, `US/US_Inputs_*` | The location's model input object: background mortality, initial population, births, treatment default and quality, net migration, and immigration with the TB burden among immigrants | Model inputs |
 | `ST/ST_SingleYearLifeTable` | Mortality rates by single year of age and year, one table per state | Model inputs: scales the national mortality rates to a state |
 | `ST/ST_PopCountsByAge` | Population by single year of age at census years, for every state | Model inputs: aging rates |
-| `US/US_MortalityCountsByAge`, `US/US_PopCountsByAge` | National deaths and population by single year of age and year | Model inputs: mortality weighting, and the US aging rates |
+| `US/US_MortalityCountsByAge`, `US/US_PopCountsByAge` | National deaths and population by single year of age and year | Model inputs: the US mortality rates, the national population that weights a state's life table, and the US aging rates |
 | `ST/ST_CalibDat_*` | Calibration targets for every state | Calibration targets |
 | `US/US_CalibDat_*` | National calibration targets | Calibration targets |
 | `ST/STdeathbyAge` | All-cause deaths by age group and year, for every state | Calibration targets |

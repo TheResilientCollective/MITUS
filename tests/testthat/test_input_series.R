@@ -49,15 +49,25 @@ test_that("national counts are read by year, including a labelled 1959+", {
   expect_identical(colnames(deaths)[ncol(deaths)], "2017")
 })
 
-test_that("a state's weighted mortality averages its life table over the national population", {
-  life_table <- as.matrix(location_life_table("CA"))
-  popdist <- national_by_age("US/US_PopCountsByAge.rds")[, colnames(life_table)]
-  weighted <- weight_mort("CA")
-  for (k in seq_along(age_group_rows)) {
-    rows <- age_group_rows[[k]]
-    expect_equal(weighted[, k],
-                 colSums(life_table[rows, ] * popdist[rows, ]) / colSums(popdist[rows, ]))
-  }
+test_that("a life table with the national rates gives the national mortality", {
+  deaths <- national_by_age("US/US_MortalityCountsByAge.rds")
+  pop <- national_by_age("US/US_PopCountsByAge.rds")
+  years <- c("1990", "2000", "2016")
+  local_mocked_bindings(location_life_table = function(loc) {
+    as.data.frame(deaths[, years] / pop[, years])
+  })
+  expect_equal(weight_mort("XX"), weight_mort("US")[years, ])
+})
+
+test_that("each age group's mortality comes only from its own ages", {
+  ages <- 0:110
+  local_mocked_bindings(location_life_table = function(loc) {
+    data.frame(`2000` = as.numeric(ages >= 5 & ages <= 14),
+               `2016` = as.numeric(ages >= 5 & ages <= 14), check.names = FALSE)
+  })
+  expected <- matrix(0, 2, 11, dimnames = list(c("2000", "2016"), NULL))
+  expected[, 2] <- 1
+  expect_equal(weight_mort("XX"), expected)
 })
 
 test_that("treatment inputs hold their last value, named by year", {

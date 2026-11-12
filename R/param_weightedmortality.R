@@ -3,11 +3,10 @@ age_group_rows <- list(1:5, 6:15, 16:25, 26:35, 36:45, 46:55, 56:65, 66:75, 76:8
 
 #' Background mortality rates by age group for a location
 #'
-#' For the US, the national death counts over the national population. For a
-#' state or county, the national rates scaled by the location's life table,
-#' over the years the life table covers, weighted by the national population.
-#' Each single year of age is scaled by the ratio of the life table's rate to
-#' the national rate at that age.
+#' For the US, the national death counts over the national population in each
+#' age group. For a state or county, the location's life table rates averaged
+#' over the single years of age in each age group, weighted by the national
+#' population at each age, for the years the life table covers.
 #'
 #' @name weight_mort
 #' @param loc location code
@@ -15,27 +14,23 @@ age_group_rows <- list(1:5, 6:15, 16:25, 26:35, 36:45, 46:55, 56:65, 66:75, 76:8
 #'   and one column per age group
 #' @export
 weight_mort <- function(loc) {
-  death_age <- national_by_age("US/US_MortalityCountsByAge.rds")
   popdist <- national_by_age("US/US_PopCountsByAge.rds")
-  years <- intersect(colnames(death_age), colnames(popdist))
-  death_age <- death_age[, years]
-  popdist <- popdist[, years]
   if (loc == "US") {
+    death_age <- national_by_age("US/US_MortalityCountsByAge.rds")
+    years <- intersect(colnames(death_age), colnames(popdist))
     return(sapply(age_group_rows, function(rows) {
-      colSums(death_age[rows, ]) / colSums(popdist[rows, ])
+      colSums(death_age[rows, years]) / colSums(popdist[rows, years])
     }))
   }
-  life_table <- location_life_table(loc)
+  life_table <- as.matrix(location_life_table(loc))
   life_years <- colnames(life_table)
-  if (!all(life_years %in% years)) {
-    stop("The life table for ", loc, " covers years without national mortality data",
+  if (!all(life_years %in% colnames(popdist))) {
+    stop("The life table for ", loc, " covers years without national population data",
          call. = FALSE)
   }
-  nat_mort <- (death_age / popdist)[, life_years]
   popdist <- popdist[, life_years]
-  ratio <- life_table / nat_mort
   sapply(age_group_rows, function(rows) {
-    colSums(nat_mort[rows, ] * popdist[rows, ] * ratio[rows, ]) / colSums(popdist[rows, ])
+    colSums(life_table[rows, ] * popdist[rows, ]) / colSums(popdist[rows, ])
   })
 }
 
