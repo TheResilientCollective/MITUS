@@ -2,13 +2,13 @@
 % Please edit documentation in R/calib_functions.R
 \name{tb_dth_age_lLik}
 \alias{tb_dth_age_lLik}
-\title{TB DEATHS AGE DISTRIBUTION 1999-2014
+\title{TB DEATHS AGE DISTRIBUTION 1999-2019
 Motivation: dirichlet-multinomial, multinomial data with additional non-sampling biases}
 \usage{
 tb_dth_age_lLik(V, rho = 0.01)
 }
 \arguments{
-\item{V}{table of deaths by age 1999-2014 (row=16 years, col=11 ages)}
+\item{V}{simulated TB deaths by age 1999-2019 (rows = 21 years, cols = 11 age groups)}
 
 \item{rho}{correlation parameter}
 }
@@ -16,6 +16,6 @@ tb_dth_age_lLik(V, rho = 0.01)
 likelihood
 }
 \description{
-TB DEATHS AGE DISTRIBUTION 1999-2014
+TB DEATHS AGE DISTRIBUTION 1999-2019
 Motivation: dirichlet-multinomial, multinomial data with additional non-sampling biases
 }

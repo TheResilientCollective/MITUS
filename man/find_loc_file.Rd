@@ -2,9 +2,15 @@
 % Please edit documentation in R/location_utils.R
 \name{find_loc_file}
 \alias{find_loc_file}
-\title{Find a location-specific data file in the MITUS package}
+\title{Find a location-specific data file}
 \usage{
-find_loc_file(loc, filetype, fallback_loc = NULL, required = TRUE)
+find_loc_file(
+  loc,
+  filetype,
+  fallback_loc = NULL,
+  data_dir = NULL,
+  required = TRUE
+)
 }
 \arguments{
 \item{loc}{Location code (e.g., "CA", "SanDiego", "US", "ST")}
@@ -13,14 +19,17 @@ find_loc_file(loc, filetype, fallback_loc = NULL, required = TRUE)
 
 \item{fallback_loc}{Optional fallback location to try if no file found}
 
+\item{data_dir}{Optional external directory to search before package inst/}
+
 \item{required}{If TRUE (default), stop with error when no file found}
 }
 \value{
 Full file path to the matched RDS file
 }
 \description{
-Searches for RDS files matching {loc}_{filetype}[_.]*.rds in the package
-inst/ directory. Supports dated filenames (e.g., ST_CalibDat_04-20-22.rds)
-and plain filenames (e.g., SanDiego_CalibDat.rds). If multiple matches are
-found, returns the most recently modified file and issues a warning.
+Searches for RDS files matching {loc}_{filetype}[_.]*.rds. When data_dir
+is provided, searches there first (e.g., an external input directory).
+Falls back to the installed package inst/ directory via system.file().
+Supports dated filenames (ST_CalibDat_04-20-22.rds) and plain filenames
+(SanDiego_CalibDat.rds). If multiple matches, returns most recently modified.
 }
