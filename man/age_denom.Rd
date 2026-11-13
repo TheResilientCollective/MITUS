@@ -20,5 +20,12 @@ For each age group but the oldest, the inverse of the share of its
 population in its oldest single year of age, smoothed to months and held at
 the end of the smoothed curve through \code{month}. The US uses its yearly
 national population counts. A state or county uses its census population
-counts, which the smoothing spaces ten years apart.
+counts, which the smoothing spaces ten years apart, and sets missing or zero
+shares to 0.0198.
+}
+\details{
+State census counts give the oldest ages as one open-ended group, such as 90
+and over, recorded at a single age that differs between census years. They
+cannot give the share of the 85-94 group at age 94, so a state or county
+takes that share from the national counts in each of its census years.
 }

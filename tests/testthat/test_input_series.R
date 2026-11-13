@@ -70,6 +70,18 @@ test_that("each age group's mortality comes only from its own ages", {
   expect_equal(weight_mort("XX"), expected)
 })
 
+test_that("a state's 85-94 aging takes the national share at age 94", {
+  census_years <- c("1950", "1960", "1970", "1980", "1990", "2000", "2010", "2017")
+  national <- national_by_age("US/US_PopCountsByAge.rds")[1:101, census_years]
+  top_coded <- national
+  top_coded[as.character(90:93), ] <- 0
+  top_coded["94", ] <- colSums(national[as.character(90:100), ])
+  local_mocked_bindings(location_census_population = function(loc) national)
+  expected <- age_denom("XX", 1801)
+  local_mocked_bindings(location_census_population = function(loc) top_coded)
+  expect_identical(age_denom("XX", 1801), expected)
+})
+
 test_that("treatment inputs hold their last value, named by year", {
   held <- held_to_end(cbind(1993:1995, c(0.1, 0.2, 0.3)))
   expect_identical(names(held), as.character(1993:2100))
