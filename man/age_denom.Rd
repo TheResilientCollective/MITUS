@@ -17,11 +17,12 @@ matrix of monthly aging denominators, one row per month and one
 }
 \description{
 For each age group but the oldest, the inverse of the share of its
-population in its oldest single year of age, smoothed to months and held at
-the end of the smoothed curve through \code{month}. The US uses its yearly
-national population counts. A state or county uses its census population
-counts, which the smoothing spaces ten years apart, and sets missing or zero
-shares to 0.0198.
+population in its oldest single year of age. The shares are smoothed by a
+spline over the years of the population counts, taken monthly from 1950 to
+the last of those years, and held at that last value through \code{month}.
+The US uses its yearly national population counts. A state or county uses
+its census population counts, which must start in 1950, and sets missing or
+zero shares to 0.0198.
 }
 \details{
 State census counts give the oldest ages as one open-ended group, such as 90

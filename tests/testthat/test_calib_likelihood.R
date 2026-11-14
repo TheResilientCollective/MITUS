@@ -321,10 +321,10 @@ test_that("California's calibrated parameters give the recorded likelihood", {
   optim <- readRDS(system.file("CA", "CA_Optim_all_15_0708.rds", package = "MITUS"))
   par <- optim[which.min(optim[, ncol(optim)]), seq_len(nrow(calib_setup()$ParamInitZ))]
   targets <- ca_targets()
-  expect_equal(calib_llikelihood(par, "CA", targets), -350.8713099943, tolerance = 1e-10)
-  expect_equal(calib_llikelihood(par, "CA", targets, tb = FALSE), -19.4498396003,
+  expect_equal(calib_llikelihood(par, "CA", targets), -350.4159354324, tolerance = 1e-10)
+  expect_equal(calib_llikelihood(par, "CA", targets, tb = FALSE), -19.5614044724,
                tolerance = 1e-10)
   fit <- calib_fit_for(par, "CA", targets)
-  expect_equal(sum(fit_llik_terms(fit, "CA", targets, calib_setup()$wts)), -350.8713099943,
+  expect_equal(sum(fit_llik_terms(fit, "CA", targets, calib_setup()$wts)), -350.4159354324,
                tolerance = 1e-10)
 })

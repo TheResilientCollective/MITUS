@@ -82,6 +82,24 @@ test_that("a state's 85-94 aging takes the national share at age 94", {
   expect_identical(age_denom("XX", 1801), expected)
 })
 
+test_that("a state's aging rates reach the last census year in that year and hold", {
+  census_years <- c("1950", "1960", "1970", "1980", "1990", "2000", "2010", "2017")
+  local_mocked_bindings(location_census_population = function(loc) {
+    national_by_age("US/US_PopCountsByAge.rds")[1:101, census_years]
+  })
+  aging <- age_denom("XX", 1801)
+  last <- year_month_to_idx(2017, 1)
+  expect_identical(aging[1801, ], aging[last, ])
+  expect_true(all(aging[last - 1, ] != aging[last, ]))
+})
+
+test_that("population counts for aging rates must start in 1950", {
+  local_mocked_bindings(location_census_population = function(loc) {
+    national_by_age("US/US_PopCountsByAge.rds")[1:101, c("1960", "1970", "1980")]
+  })
+  expect_error(age_denom("XX", 1801), "must start in 1950")
+})
+
 test_that("treatment inputs hold their last value, named by year", {
   held <- held_to_end(cbind(1993:1995, c(0.1, 0.2, 0.3)))
   expect_identical(names(held), as.character(1993:2100))
